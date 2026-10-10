@@ -251,3 +251,69 @@ export async function updateRunTripCount(input: {
     return { success: true };
   }
 }
+
+/**
+ * Fetch all active routes from the database.
+ */
+export async function getRoutes(): Promise<{ success: boolean; data?: string[]; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("routes")
+      .select("name")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      // Fallback defaults if table is pending
+      return { success: true, data: ["Guinsay", "Taytay", "Sabang"] };
+    }
+
+    const routeNames = (data || []).map((r: { name: string }) => r.name);
+    return {
+      success: true,
+      data: routeNames.length > 0 ? routeNames : ["Guinsay", "Taytay", "Sabang"],
+    };
+  } catch (err) {
+    return { success: true, data: ["Guinsay", "Taytay", "Sabang"] };
+  }
+}
+
+/**
+ * Add a new route destination (Officials / Admin).
+ */
+export async function createRoute(name: string): Promise<ActionResult> {
+  const cleanName = name.trim();
+  if (!cleanName) return { success: false, error: "Route name cannot be empty" };
+
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("routes").insert({
+      name: cleanName,
+      is_active: true,
+      sort_order: 10,
+    });
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath("/controller");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Error creating route" };
+  }
+}
+
+/**
+ * Delete a route destination (Officials / Admin).
+ */
+export async function deleteRoute(name: string): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("routes").delete().eq("name", name);
+    if (error) return { success: false, error: error.message };
+    revalidatePath("/controller");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Error deleting route" };
+  }
+}
+

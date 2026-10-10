@@ -20,7 +20,11 @@ export type ActionResult = {
  */
 export async function registerDriver(input: {
   body_number: string;
-  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  middle_initial?: string;
+  nickname?: string;
+  full_name?: string;
   contact_number?: string;
   driver_photo_url?: string;
   unit_photo_url?: string;
@@ -53,6 +57,13 @@ export async function registerDriver(input: {
     };
   }
 
+  // Derive full_name and discrete components
+  const firstName = parsed.data.first_name || (parsed.data.full_name ? parsed.data.full_name.trim().split(" ")[0] : "");
+  const lastName = parsed.data.last_name || (parsed.data.full_name ? parsed.data.full_name.trim().split(" ").slice(1).join(" ") : "");
+  const middleInitial = parsed.data.middle_initial || "—";
+  const nickname = parsed.data.nickname || firstName;
+  const fullName = parsed.data.full_name || `${lastName}, ${firstName}${middleInitial && middleInitial !== "—" ? " " + middleInitial : ""}`;
+
   // Step 1: Insert driver anchor
   const { data: driver, error: driverError } = await supabase
     .from("drivers")
@@ -75,7 +86,11 @@ export async function registerDriver(input: {
     .insert({
       driver_id: driver.id,
       version: 1,
-      full_name: parsed.data.full_name,
+      first_name: firstName || "Unknown",
+      last_name: lastName || "Driver",
+      middle_initial: middleInitial,
+      nickname: nickname,
+      full_name: fullName,
       contact_number: parsed.data.contact_number || null,
       driver_photo_url: input.driver_photo_url || null,
       unit_photo_url: input.unit_photo_url || null,
@@ -84,7 +99,6 @@ export async function registerDriver(input: {
     });
 
   if (versionError) {
-    // Rollback: this shouldn't happen with proper constraints
     return { success: false, error: versionError.message };
   }
 
@@ -102,7 +116,11 @@ export async function registerDriver(input: {
  */
 export async function updateDriverProfile(input: {
   driver_id: string;
-  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  middle_initial?: string;
+  nickname?: string;
+  full_name?: string;
   contact_number?: string;
   change_reason: string;
   driver_photo_url?: string;
@@ -133,6 +151,20 @@ export async function updateDriverProfile(input: {
     return { success: false, error: "Driver not found" };
   }
 
+  // Fetch previous version to inherit discrete name fields if not explicitly changed
+  const { data: latestVersion } = await supabase
+    .from("driver_profile_versions")
+    .select("*")
+    .eq("driver_id", driver.id)
+    .eq("version", driver.current_version)
+    .maybeSingle();
+
+  const firstName = parsed.data.first_name || latestVersion?.first_name || "Driver";
+  const lastName = parsed.data.last_name || latestVersion?.last_name || "Profile";
+  const middleInitial = parsed.data.middle_initial ?? latestVersion?.middle_initial ?? "—";
+  const nickname = parsed.data.nickname ?? latestVersion?.nickname ?? null;
+  const fullName = parsed.data.full_name || latestVersion?.full_name || `${firstName} ${middleInitial !== "—" ? middleInitial + " " : ""}${lastName}`.trim();
+
   const newVersion = driver.current_version + 1;
 
   // Insert new version
@@ -141,10 +173,14 @@ export async function updateDriverProfile(input: {
     .insert({
       driver_id: driver.id,
       version: newVersion,
-      full_name: parsed.data.full_name,
-      contact_number: parsed.data.contact_number || null,
-      driver_photo_url: input.driver_photo_url || null,
-      unit_photo_url: input.unit_photo_url || null,
+      first_name: firstName,
+      last_name: lastName,
+      middle_initial: middleInitial,
+      nickname: nickname,
+      full_name: fullName,
+      contact_number: parsed.data.contact_number || latestVersion?.contact_number || null,
+      driver_photo_url: input.driver_photo_url || latestVersion?.driver_photo_url || null,
+      unit_photo_url: input.unit_photo_url || latestVersion?.unit_photo_url || null,
       changed_by: user.id,
       change_reason: parsed.data.change_reason,
     });

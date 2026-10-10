@@ -20,10 +20,14 @@ export const driverRegistrationSchema = z.object({
     .min(1, "Body number is required")
     .max(20, "Body number cannot exceed 20 characters")
     .regex(/^[A-Za-z0-9\-]+$/, "Body number can only contain letters, numbers, and hyphens"),
+  first_name: z.string().max(100).optional(),
+  last_name: z.string().max(100).optional(),
+  middle_initial: z.string().max(10).optional().or(z.literal("")),
+  nickname: z.string().max(50).optional().or(z.literal("")),
   full_name: z
     .string()
-    .min(2, "Full name must be at least 2 characters")
-    .max(150, "Full name cannot exceed 150 characters"),
+    .max(250, "Full name cannot exceed 250 characters")
+    .optional(),
   contact_number: z
     .string()
     .max(30, "Contact number too long")
@@ -33,13 +37,39 @@ export const driverRegistrationSchema = z.object({
 
 export type DriverRegistrationInput = z.infer<typeof driverRegistrationSchema>;
 
-// Driver profile update validation
+// Route validation
+export const routeSchema = z.object({
+  name: z.string().min(1, "Route name is required").max(50, "Route name cannot exceed 50 characters"),
+  is_active: z.boolean().default(true),
+  sort_order: z.number().int().default(0),
+});
+
+export type RouteInput = z.infer<typeof routeSchema>;
+
 export const driverUpdateSchema = z.object({
   driver_id: z.string().uuid("Invalid driver ID"),
+  first_name: z
+    .string()
+    .min(1, "First name is required")
+    .max(100, "First name cannot exceed 100 characters")
+    .optional(),
+  last_name: z
+    .string()
+    .min(1, "Last name is required")
+    .max(100, "Last name cannot exceed 100 characters")
+    .optional(),
+  middle_initial: z
+    .string()
+    .max(10, "M.I. too long")
+    .optional(),
+  nickname: z
+    .string()
+    .max(50, "Nickname too long")
+    .optional(),
   full_name: z
     .string()
-    .min(2, "Full name must be at least 2 characters")
-    .max(150, "Full name cannot exceed 150 characters"),
+    .max(150, "Full name cannot exceed 150 characters")
+    .optional(),
   contact_number: z
     .string()
     .max(30, "Contact number too long")

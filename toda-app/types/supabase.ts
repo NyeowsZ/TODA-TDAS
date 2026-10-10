@@ -78,11 +78,39 @@ export interface Database {
         };
         Relationships: [];
       };
+      routes: {
+        Row: {
+          id: string;
+          name: string;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       driver_profile_versions: {
         Row: {
           id: number;
           driver_id: string;
           version: number;
+          first_name: string;
+          last_name: string;
+          middle_initial: string | null;
+          nickname: string | null;
           full_name: string;
           contact_number: string | null;
           driver_photo_url: string | null;
@@ -95,7 +123,11 @@ export interface Database {
           id?: number;
           driver_id: string;
           version: number;
-          full_name: string;
+          first_name: string;
+          last_name: string;
+          middle_initial?: string | null;
+          nickname?: string | null;
+          full_name?: string;
           contact_number?: string | null;
           driver_photo_url?: string | null;
           unit_photo_url?: string | null;
@@ -107,6 +139,10 @@ export interface Database {
           id?: number;
           driver_id?: string;
           version?: number;
+          first_name?: string;
+          last_name?: string;
+          middle_initial?: string | null;
+          nickname?: string | null;
           full_name?: string;
           contact_number?: string | null;
           driver_photo_url?: string | null;
@@ -213,6 +249,10 @@ export interface Database {
         Row: {
           id: string;
           body_number: string;
+          first_name: string;
+          last_name: string;
+          middle_initial: string;
+          nickname: string;
           full_name: string;
           driver_photo_url: string | null;
           status: DriverStatus;
@@ -240,6 +280,7 @@ export type DriverProfileVersion = Database["public"]["Tables"]["driver_profile_
 export type DispatchLog = Database["public"]["Tables"]["dispatch_logs"]["Row"];
 export type AuditAdjustment = Database["public"]["Tables"]["audit_adjustments"]["Row"];
 export type SystemSetting = Database["public"]["Tables"]["system_settings"]["Row"];
+export type Route = Database["public"]["Tables"]["routes"]["Row"];
 
 export type DriverSummary = Database["public"]["Views"]["view_driver_active_summaries"]["Row"];
 
