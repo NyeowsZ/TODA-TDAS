@@ -1,22 +1,34 @@
 -- ============================================================================
 -- Dacotoda (TODA) Management & Information System
--- Production Database Schema & Security Blueprint
--- Conforms strictly to SYSTEM_ARCHITECTURE.md & INVARIANTS.md
--- Timezone Standard: UTC stored, Asia/Manila (GMT+8) display
+-- Complete Production Database Setup & Seed Script
+-- Conforms strictly to SYSTEM_ARCHITECTURE.md, INVARIANTS.md, and SYSTEM_UIUX.md
+-- Timezone Standard: UTC stored in PostgreSQL, Asia/Manila (GMT+8) in display
+-- 
+-- INSTRUCTIONS FOR SUPABASE:
+-- 1. Open your Supabase Project Dashboard -> SQL Editor
+-- 2. Click "New Query", paste this entire file, and click "Run"
+-- 3. All tables, functions, RLS policies, storage bucket, and test seed accounts
+--    will be created cleanly and idempotently.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
 -- 1. EXTENSIONS
+-- ----------------------------------------------------------------------------
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- ----------------------------------------------------------------------------
 -- 2. USER ROLES ENUM
+-- ----------------------------------------------------------------------------
 DO $$ BEGIN
     CREATE TYPE public.app_role AS ENUM ('controller', 'official', 'auditor', 'secretary', 'chairman');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
+-- ----------------------------------------------------------------------------
 -- 3. DYNAMIC SYSTEM CONFIGURATION
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.system_settings (
     key VARCHAR(50) PRIMARY KEY,
     value JSONB NOT NULL,
@@ -24,7 +36,6 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
     updated_by UUID REFERENCES auth.users(id)
 );
 
--- Seed initial system settings
 INSERT INTO public.system_settings (key, value) VALUES
     ('sanity_multiplier_threshold', '{"threshold": 10}'),
     ('controller_undo_window_minutes', '{"minutes": 2}'),
@@ -33,9 +44,13 @@ INSERT INTO public.system_settings (key, value) VALUES
     ('grace_period_auditor', '{"hours": 36}'),
     ('dispatch_sanity_threshold', '{"threshold": 10}'),
     ('operating_hours', '{"start": "05:00", "end": "23:00"}')
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    updated_at = NOW();
 
--- 4. USER PROFILES (Maps 1:1 with auth.users)
+-- ----------------------------------------------------------------------------
+-- 4. USER PROFILES TABLE (Maps 1:1 with auth.users)
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.user_profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name VARCHAR(150) NOT NULL,
@@ -44,7 +59,9 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ----------------------------------------------------------------------------
 -- 5. DRIVERS (Identity Anchor — Immutable Body Number Anchor)
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.drivers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     body_number VARCHAR(20) UNIQUE NOT NULL,
@@ -57,7 +74,9 @@ CREATE TABLE IF NOT EXISTS public.drivers (
 CREATE INDEX IF NOT EXISTS idx_drivers_body_num ON public.drivers(body_number);
 CREATE INDEX IF NOT EXISTS idx_drivers_status ON public.drivers(status);
 
+-- ----------------------------------------------------------------------------
 -- 6. DRIVER PROFILE VERSIONS (Immutable SCD-2 History)
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.driver_profile_versions (
     id BIGSERIAL PRIMARY KEY,
     driver_id UUID NOT NULL REFERENCES public.drivers(id) ON DELETE RESTRICT,
@@ -74,7 +93,9 @@ CREATE TABLE IF NOT EXISTS public.driver_profile_versions (
 
 CREATE INDEX IF NOT EXISTS idx_driver_versions_lookup ON public.driver_profile_versions(driver_id, version);
 
+-- ----------------------------------------------------------------------------
 -- 7. DISPATCH LEDGER (Append-Only — Hard Deletes Prohibited)
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.dispatch_logs (
     id BIGSERIAL PRIMARY KEY,
     driver_id UUID NOT NULL REFERENCES public.drivers(id) ON DELETE RESTRICT,
@@ -96,7 +117,9 @@ CREATE INDEX IF NOT EXISTS idx_dispatch_audit_lookup
 CREATE INDEX IF NOT EXISTS idx_dispatch_driver_date
     ON public.dispatch_logs(driver_id, logged_at DESC);
 
+-- ----------------------------------------------------------------------------
 -- 8. AUDIT ADJUSTMENTS (36-Hour Window Adjustments by Officials)
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.audit_adjustments (
     id BIGSERIAL PRIMARY KEY,
     dispatch_id BIGINT NOT NULL REFERENCES public.dispatch_logs(id),
@@ -112,7 +135,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_adjustments_dispatch
 CREATE INDEX IF NOT EXISTS idx_audit_adjustments_date
     ON public.audit_adjustments(created_at DESC);
 
+-- ----------------------------------------------------------------------------
 -- 9. LIGHTWEIGHT IN-MEMORY HYDRATION VIEW (INV-NET-02)
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW public.view_driver_active_summaries AS
 SELECT
     d.id,
@@ -125,9 +150,9 @@ JOIN public.driver_profile_versions v
     ON d.id = v.driver_id
     AND d.current_version = v.version;
 
--- ============================================================================
--- SECURITY FUNCTIONS & ROW LEVEL SECURITY (RLS) POLICIES
--- ============================================================================
+-- ----------------------------------------------------------------------------
+-- 10. HELPER FUNCTIONS & AUTH TRIGGERS
+-- ----------------------------------------------------------------------------
 
 -- Function: Resolve current user's role from public.user_profiles
 CREATE OR REPLACE FUNCTION public.current_user_role()
@@ -135,7 +160,32 @@ RETURNS app_role AS $$
     SELECT role FROM public.user_profiles WHERE id = auth.uid() AND is_active = true;
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
--- Enable RLS across all tables
+-- Trigger: Automatically create public.user_profiles on auth.users creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO public.user_profiles (id, full_name, role, is_active)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+        COALESCE((NEW.raw_user_meta_data->>'role')::app_role, 'controller'::app_role),
+        true
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        full_name = EXCLUDED.full_name,
+        role = EXCLUDED.role;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ----------------------------------------------------------------------------
+-- 11. ROW LEVEL SECURITY (RLS) POLICIES
+-- ----------------------------------------------------------------------------
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
@@ -143,9 +193,7 @@ ALTER TABLE public.driver_profile_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dispatch_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_adjustments ENABLE ROW LEVEL SECURITY;
 
--- ----------------------------------------------------------------------------
 -- SYSTEM SETTINGS POLICIES
--- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Settings readable by authenticated staff" ON public.system_settings;
 CREATE POLICY "Settings readable by authenticated staff"
 ON public.system_settings FOR SELECT
@@ -159,9 +207,7 @@ TO authenticated
 USING (public.current_user_role() = 'chairman')
 WITH CHECK (public.current_user_role() = 'chairman');
 
--- ----------------------------------------------------------------------------
 -- USER PROFILES POLICIES
--- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Profiles readable by authenticated staff" ON public.user_profiles;
 CREATE POLICY "Profiles readable by authenticated staff"
 ON public.user_profiles FOR SELECT
@@ -175,9 +221,7 @@ TO authenticated
 USING (id = auth.uid())
 WITH CHECK (id = auth.uid());
 
--- ----------------------------------------------------------------------------
 -- DRIVERS POLICIES
--- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Drivers readable by authenticated staff" ON public.drivers;
 CREATE POLICY "Drivers readable by authenticated staff"
 ON public.drivers FOR SELECT
@@ -191,9 +235,7 @@ TO authenticated
 USING (public.current_user_role() IN ('secretary', 'chairman'))
 WITH CHECK (public.current_user_role() IN ('secretary', 'chairman'));
 
--- ----------------------------------------------------------------------------
 -- DRIVER PROFILE VERSIONS POLICIES (Append-Only)
--- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Versions readable by authenticated staff" ON public.driver_profile_versions;
 CREATE POLICY "Versions readable by authenticated staff"
 ON public.driver_profile_versions FOR SELECT
@@ -206,9 +248,7 @@ ON public.driver_profile_versions FOR INSERT
 TO authenticated
 WITH CHECK (public.current_user_role() IN ('secretary', 'chairman'));
 
--- ----------------------------------------------------------------------------
 -- DISPATCH LOGS POLICIES (POLP + Grace Window at Database Engine)
--- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Controllers can insert own dispatches" ON public.dispatch_logs;
 CREATE POLICY "Controllers can insert own dispatches"
 ON public.dispatch_logs FOR INSERT
@@ -248,9 +288,7 @@ WITH CHECK (
     AND voided_by = auth.uid()
 );
 
--- ----------------------------------------------------------------------------
 -- AUDIT ADJUSTMENTS POLICIES (36-Hour Window Enforced at DB Engine)
--- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Auditors can insert adjustments within 36 hours" ON public.audit_adjustments;
 CREATE POLICY "Auditors can insert adjustments within 36 hours"
 ON public.audit_adjustments FOR INSERT
@@ -275,17 +313,22 @@ ON public.audit_adjustments FOR SELECT
 TO authenticated
 USING (public.current_user_role() IN ('official', 'auditor', 'secretary', 'chairman'));
 
--- ============================================================================
--- SUPABASE REALTIME CONFIGURATION
--- Enable realtime publication for instant roster synchronization
--- ============================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.drivers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.dispatch_logs;
+-- ----------------------------------------------------------------------------
+-- 12. SUPABASE REALTIME CONFIGURATION
+-- ----------------------------------------------------------------------------
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.drivers;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
--- ============================================================================
--- STORAGE BUCKET CONFIGURATION
--- Create 'driver-photos' bucket and access policies
--- ============================================================================
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.dispatch_logs;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 13. STORAGE BUCKET CONFIGURATION ('driver-photos')
+-- ----------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'driver-photos',
@@ -296,7 +339,6 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Storage Policies
 DROP POLICY IF EXISTS "Public driver photo access" ON storage.objects;
 CREATE POLICY "Public driver photo access"
 ON storage.objects FOR SELECT
@@ -311,3 +353,168 @@ WITH CHECK (
     bucket_id = 'driver-photos'
     AND public.current_user_role() IN ('secretary', 'chairman')
 );
+
+-- ============================================================================
+-- 14. SEED DATA (ACCOUNTS, ROLES, DRIVERS & DISPATCH LOGS)
+-- ============================================================================
+
+DO $$
+DECLARE
+    -- Deterministic UUIDs for seed accounts
+    uid_chairman   UUID := 'a0000000-0000-0000-0000-000000000001';
+    uid_secretary  UUID := 'a0000000-0000-0000-0000-000000000002';
+    uid_auditor    UUID := 'a0000000-0000-0000-0000-000000000003';
+    uid_controller1 UUID := 'a0000000-0000-0000-0000-000000000004';
+    uid_controller2 UUID := 'a0000000-0000-0000-0000-000000000005';
+
+    -- Default common password: Password123!
+    enc_pw TEXT := crypt('Password123!', gen_salt('bf'));
+
+    has_provider_id BOOLEAN;
+BEGIN
+    -- Check if auth.identities has provider_id column
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'auth' AND table_name = 'identities' AND column_name = 'provider_id'
+    ) INTO has_provider_id;
+
+    -- A. INSERT AUTH USERS
+    -- 1. Chairman
+    INSERT INTO auth.users (
+        instance_id, id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+    ) VALUES (
+        '00000000-0000-0000-0000-000000000000', uid_chairman, 'authenticated', 'authenticated',
+        'chairman@toda.local', enc_pw, NOW(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"full_name":"Manuel Roxas (Chairman)","role":"chairman"}'::jsonb,
+        NOW(), NOW()
+    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+
+    -- 2. Secretary
+    INSERT INTO auth.users (
+        instance_id, id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+    ) VALUES (
+        '00000000-0000-0000-0000-000000000000', uid_secretary, 'authenticated', 'authenticated',
+        'secretary@toda.local', enc_pw, NOW(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"full_name":"Corazon Aquino (Secretary)","role":"secretary"}'::jsonb,
+        NOW(), NOW()
+    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+
+    -- 3. Auditor / Official
+    INSERT INTO auth.users (
+        instance_id, id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+    ) VALUES (
+        '00000000-0000-0000-0000-000000000000', uid_auditor, 'authenticated', 'authenticated',
+        'auditor@toda.local', enc_pw, NOW(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"full_name":"Ramon Magsaysay (Auditor)","role":"auditor"}'::jsonb,
+        NOW(), NOW()
+    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+
+    -- 4. Controller 1 (Terminal Booth 1)
+    INSERT INTO auth.users (
+        instance_id, id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+    ) VALUES (
+        '00000000-0000-0000-0000-000000000000', uid_controller1, 'authenticated', 'authenticated',
+        'controller1@toda.local', enc_pw, NOW(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"full_name":"Juan Dispatcher (Booth 1)","role":"controller"}'::jsonb,
+        NOW(), NOW()
+    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+
+    -- 5. Controller 2 (Terminal Booth 2)
+    INSERT INTO auth.users (
+        instance_id, id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+    ) VALUES (
+        '00000000-0000-0000-0000-000000000000', uid_controller2, 'authenticated', 'authenticated',
+        'controller2@toda.local', enc_pw, NOW(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"full_name":"Pedro Dispatcher (Booth 2)","role":"controller"}'::jsonb,
+        NOW(), NOW()
+    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+
+    -- B. INSERT AUTH IDENTITIES (Enables password sign-in across Supabase versions)
+    IF has_provider_id THEN
+        INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+        VALUES
+            (uid_chairman::text, uid_chairman, jsonb_build_object('sub', uid_chairman::text, 'email', 'chairman@toda.local'), 'email', uid_chairman::text, NOW(), NOW(), NOW()),
+            (uid_secretary::text, uid_secretary, jsonb_build_object('sub', uid_secretary::text, 'email', 'secretary@toda.local'), 'email', uid_secretary::text, NOW(), NOW(), NOW()),
+            (uid_auditor::text, uid_auditor, jsonb_build_object('sub', uid_auditor::text, 'email', 'auditor@toda.local'), 'email', uid_auditor::text, NOW(), NOW(), NOW()),
+            (uid_controller1::text, uid_controller1, jsonb_build_object('sub', uid_controller1::text, 'email', 'controller1@toda.local'), 'email', uid_controller1::text, NOW(), NOW(), NOW()),
+            (uid_controller2::text, uid_controller2, jsonb_build_object('sub', uid_controller2::text, 'email', 'controller2@toda.local'), 'email', uid_controller2::text, NOW(), NOW(), NOW())
+        ON CONFLICT (provider, provider_id) DO NOTHING;
+    ELSE
+        INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+        VALUES
+            (uid_chairman::text, uid_chairman, jsonb_build_object('sub', uid_chairman::text, 'email', 'chairman@toda.local'), 'email', NOW(), NOW(), NOW()),
+            (uid_secretary::text, uid_secretary, jsonb_build_object('sub', uid_secretary::text, 'email', 'secretary@toda.local'), 'email', NOW(), NOW(), NOW()),
+            (uid_auditor::text, uid_auditor, jsonb_build_object('sub', uid_auditor::text, 'email', 'auditor@toda.local'), 'email', NOW(), NOW(), NOW()),
+            (uid_controller1::text, uid_controller1, jsonb_build_object('sub', uid_controller1::text, 'email', 'controller1@toda.local'), 'email', NOW(), NOW(), NOW()),
+            (uid_controller2::text, uid_controller2, jsonb_build_object('sub', uid_controller2::text, 'email', 'controller2@toda.local'), 'email', NOW(), NOW(), NOW())
+        ON CONFLICT DO NOTHING;
+    END IF;
+
+    -- C. ENSURE USER PROFILES EXIST WITH EXACT APP ROLES
+    INSERT INTO public.user_profiles (id, full_name, role, is_active)
+    VALUES
+        (uid_chairman, 'Manuel Roxas', 'chairman', true),
+        (uid_secretary, 'Corazon Aquino', 'secretary', true),
+        (uid_auditor, 'Ramon Magsaysay', 'auditor', true),
+        (uid_controller1, 'Juan Dispatcher (Booth 1)', 'controller', true),
+        (uid_controller2, 'Pedro Dispatcher (Booth 2)', 'controller', true)
+    ON CONFLICT (id) DO UPDATE SET
+        full_name = EXCLUDED.full_name,
+        role = EXCLUDED.role,
+        is_active = EXCLUDED.is_active;
+
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 15. SEED DRIVERS & SCD-2 PROFILE VERSIONS
+-- ----------------------------------------------------------------------------
+INSERT INTO public.drivers (id, body_number, current_version, status, created_by)
+VALUES
+    ('d0000000-0000-0000-0000-000000000042', '042', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000088', '088', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000118', '118', 1, 'suspended', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000155', '155', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000204', '204', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000301', '301', 2, 'active', 'a0000000-0000-0000-0000-000000000002')
+ON CONFLICT (body_number) DO UPDATE SET
+    status = EXCLUDED.status,
+    current_version = EXCLUDED.current_version;
+
+INSERT INTO public.driver_profile_versions (driver_id, version, full_name, contact_number, changed_by, change_reason)
+VALUES
+    ('d0000000-0000-0000-0000-000000000042', 1, 'Rodrigo Mendoza', '09171234567', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000088', 1, 'Carlos Santos', '09182345678', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000118', 1, 'Danilo Ramos', '09193456789', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration (Suspended: Route violation)'),
+    ('d0000000-0000-0000-0000-000000000155', 1, 'Eduardo Reyes', '09204567890', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000204', 1, 'Fernando Dizon', '09215678901', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000301', 1, 'Gabriel Garcia Sr.', '09226789012', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000301', 2, 'Gabriel Garcia Jr.', '09226789012', 'a0000000-0000-0000-0000-000000000002', 'Franchise Transfer: Successor driver registered')
+ON CONFLICT (driver_id, version) DO NOTHING;
+
+-- ----------------------------------------------------------------------------
+-- 16. SEED SAMPLE DISPATCH LEDGER ENTRIES
+-- ----------------------------------------------------------------------------
+INSERT INTO public.dispatch_logs (driver_id, controller_id, launch_count, logged_at, is_voided, void_reason)
+VALUES
+    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '120 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000088', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '95 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000155', 'a0000000-0000-0000-0000-000000000004', 2, NOW() - INTERVAL '70 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000204', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '40 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000301', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '20 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '15 minutes', true, 'Entered wrong launch multiplier (voided within 2m window)'),
+    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '14 minutes', false, null);
