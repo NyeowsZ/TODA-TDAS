@@ -181,3 +181,14 @@
 - [x] **Step 9: Remote Push**:
   - All 6 microcommits pushed to `origin feature/controller-terminal-refactor`.
   - Ready for user Pull Request into `dev`.
+- [x] **Step 10: Header Card Elimination & SQL Schema Overhaul (Zero Mockups)**:
+  - Removed bulky demo card header from `controller-terminal.tsx` to maximize vertical terminal space.
+  - Overhauled SQL schema:
+    - Added `public.routes` table (`id`, `name`, `is_active`, `sort_order`, `created_at`) with RLS and realtime publication.
+    - Added discrete columns `first_name`, `last_name`, `middle_initial`, and `nickname` to `public.driver_profile_versions`.
+    - Added `route VARCHAR(50)` to `public.dispatch_logs`.
+    - Updated `view_driver_active_summaries` view to directly expose all discrete name columns.
+  - Updated `quick_fix.sql` Section 6 with idempotent migration for Supabase SQL Editor.
+  - Updated `types/supabase.ts`, `validators.ts`, `driver-actions.ts`, `dispatch-actions.ts`, and `use-driver-cache.ts`.
+  - Completely eradicated synthetic regex parsing (`parseDriverName`); all UI components bind to real database columns.
+  - Successfully verified with `npx tsc --noEmit` (0 errors) and `npm run build` (10/10 routes compiled).

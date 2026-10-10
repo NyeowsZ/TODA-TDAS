@@ -175,18 +175,15 @@
 | 2026-10-10 | Resolved Route Focus Bleed-Through: Suppressed browser synthetic click (`e.detail === 0`) on `<button>` release, and disarmed Enter transitions (`routeReadyForEnter = false`) until Omnibox Enter key is fully released (`keyup` + 80ms buffer). Focus now stays rock-solid on the Route button until explicitly confirmed. |
 | 2026-10-10 | Resolved Arrow Key Inversion: Removed duplicate `keydown` handler on button elements that previously caused double bubbling to `window` (+2/-2 jump in 3-item array), restoring true unidirectional navigation (<kbd>→</kbd> moves right: `Guinsay` → `Taytay` → `Sabang`, <kbd>←</kbd> moves left: `Sabang` → `Taytay` → `Guinsay`). |
 | 2026-10-10 | Enforced Invariant Lockout & Full Card Visual Alert: When a driver is Suspended or Inactive, the entire Driver Info card illuminates with high-contrast alert styling (vibrant red for Suspended with `⛔ SUSPENDED` badge; amber for Inactive with `⚠️ INACTIVE` badge). Pressing <kbd>Enter</kbd> or clicking is strictly locked out (dual shake animation, blocking toast, hard-disabled dispatch controls). |
+| 2026-10-10 | **Eliminated Top Header Card**: Removed the bulky explanatory demo card header from `controller-terminal.tsx`, replacing it with a minimal inline status bar (`Drivers Cached • Sub-5ms Instant Lookup` + live Manila time), reclaiming full vertical height for the 100dvh layout. |
+| 2026-10-10 | **Eliminated All Mockups & Overhauled Database Schema**: Added `public.routes` table (`id`, `name`, `is_active`, `sort_order`, `created_at`) with RLS and realtime. Added discrete database columns `first_name`, `last_name`, `middle_initial`, and `nickname` to `driver_profile_versions` (and projected in `view_driver_active_summaries`). Added `route` column to `dispatch_logs`. Removed synthetic `parseDriverName` regex parser across all components; all UI elements now bind directly to real PostgreSQL columns. Added idempotent migration in `supabase/quick_fix.sql`. |
 
 ---
 
 ## 10. Open Questions / Next Steps
 
-- **Integrate into Next.js Production Components (`toda-app`)**:
-  - Update `controller-terminal.tsx` to mount the verified 3-card vertical stack (Omnibox -> Route Selector with arrow navigation & last-used memory -> Driver Profile & Launch Amount).
-  - Add Route column to `live-stack-feed.tsx` with separate unmerged rows and neutral slate badges.
-  - Implement Admin route settings modal in controller header.
-- **Supabase credentials**: Populate `.env.local` with real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- **Run quick fix**: Execute `supabase/quick_fix.sql` in the Supabase SQL Editor.
-- **Git PR & Merge**: User reviews branch `dev` and merges into `main`.
+- **Apply Migration in Supabase**: Execute Section 6 of `supabase/quick_fix.sql` in the Supabase SQL Editor to add `routes` table, discrete name columns, and update the active summaries view on remote database.
+- **Git PR & Merge**: Review branch `feature/controller-terminal-refactor` and merge into `dev` / `main`.
 
 ---
 
