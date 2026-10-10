@@ -128,6 +128,25 @@
   - [x] Quick Driver Registration Modal (`quick-driver-modal.tsx`) with 1-click "Save & Dispatch" directly from search query.
   - [x] Clean Output & Masterlist Reconciliation Tab (`clean-output-tab.tsx`) in Official Audit with click-to-reconcile checklist (localStorage persisted), CSV export, and print formatting.
   - [x] Server action `updateRunTripCount` maintaining immutable ledger rules while allowing in-window quantity adjustments.
+- [x] Approved Controller Terminal 3-Card Vertical Stack Architecture (`DONOTPUSH/samples/sample-1-wireframe-faithful.html` & `sample-refined.html`):
+  - [x] **Strict 100dvh layout**: Viewport-locked, internal scrolling, zero dead space on desktop/kiosk screens.
+  - [x] **Card 1 (Top) — Omnibox**: Body number / name search, fixed 3-row stock height (`h-[120px]`), full readable column headers (Body No., Last Name, First Name, M.I., Nickname), subdued highlight for non-focused rows, empty <kbd>Enter</kbd> validation guard (prevents duplicate dispatches).
+  - [x] **Card 2 (Middle) — Route Selector**: Dedicated standalone box with horizontal route buttons (`Guinsay`, `Taytay`, `Sabang`, etc., CRUD-configurable by Admin).
+    - Roving focus & keyboard navigation: <kbd>←</kbd> and <kbd>→</kbd> arrow keys smoothly cycle routes.
+    - **Last-used route memory**: Automatically remembers and focuses the last-used route button when advancing from Omnibox.
+    - <kbd>Enter</kbd> on route button confirms route and immediately focuses the Launch Amount input.
+    - <kbd>Escape</kbd> steps back to Omnibox.
+  - [x] **Card 3 (Bottom) — Driver Info + Launch Amount**:
+    - Driver Profile Card: 80x80 photo thumbnail, large Body # & Nickname, full name, row & today trip count.
+    - **Dynamic Alert Light-Up**:
+      - **Suspended**: The ENTIRE driver info card lights up in vibrant red (`bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-100`), red avatar container, prominent animated `⛔ SUSPENDED` badge, inline alert notice, and hard-disabled dispatch controls (`Blocked (Suspended)`).
+      - **Inactive**: The ENTIRE driver info card lights up in bright warning amber (`bg-amber-50 border-2 border-amber-500 ring-4 ring-amber-100`), amber avatar container, prominent `⚠️ INACTIVE` badge, inline alert notice, and hard-disabled dispatch controls (`Blocked (Inactive)`).
+      - **Active**: Clean slate styling (`bg-slate-50/90 border-slate-200/90`), zero redundant badge.
+    - **Hard Enter Lockout (Non-Enterable)**: Following core domain invariants, pressing <kbd>Enter</kbd> in Omnibox or clicking a suspended/inactive driver row strictly aborts transition (triggers dual card/omnibox shake animation, displays `⛔ BLOCKED: Cannot dispatch suspended/inactive unit!`, and prevents entering Route Selector or Launch Amount).
+    - Clean Semantic Label: "Launch Amount" (default `1`, highlighted/selected on focus for instant typing).
+    - 500ms Anti-Spam Lock: Debounces and locks submission button with subtle "Logged" indicator.
+    - Distinct Append-Only Rows: Every dispatch has an individual ID and discrete row; multiple dispatches for the same unit (e.g. `550 x10` then `550 x1`) remain completely separate.
+    - Clean Neutral Slate Badges: Zero yellowing/amber highlights on launch multipliers.
 
 ---
 
@@ -146,13 +165,27 @@
 | 2026-10-10 | Fixed controller submission error masking and added live Supabase Realtime sync to audit/analytics.  |
 | 2026-10-10 | Created `supabase/quick_fix.sql` resolving Security Definer View warning and RLS policy evaluation.  |
 | 2026-10-10 | Re-architected controller input flow to match `DONOTPUSH/dacotoda-daily-attendance-to-masterlist` (Omnibox hotkey, 90-line sheet pagination, consecutive run grouping, inline stepper editing, clean output reconciliation). |
+| 2026-10-10 | User provided hand-drawn 3-card vertical stack wireframe (Omnibox -> Route -> Driver Info / Launch Amount). Wireframe mockup created in `DONOTPUSH/samples/sample-1-wireframe-faithful.html` with Tailwind CSS. |
+| 2026-10-10 | Refined controller terminal per user direction: fixed 3-row stock height on query results, full readable column headers (Body No., Last Name, First Name, M.I., Nickname), removed all yellow/amber styling on launch counts (neutral slate badges), removed redundant "Active" badge (display badge only if Inactive/Suspended). |
+| 2026-10-10 | Added Empty Search <kbd>Enter</kbd> validation guard to eliminate accidental duplicate dispatches when pressing Enter on empty Omnibox. |
+| 2026-10-10 | Implemented 500ms anti-spam dispatch lock with visual indicator to prevent rapid double-taps. |
+| 2026-10-10 | Integrated Admin Route Management (Guinsay, Taytay, Sabang) with dedicated horizontal route buttons. |
+| 2026-10-10 | Implemented exact keyboard flow: Omnibox <kbd>Enter</kbd> -> focuses last-used route button element -> <kbd>←</kbd>/<kbd>→</kbd> arrow keys to navigate routes -> <kbd>Enter</kbd> advances to Launch Amount (`amountInput.select()`) -> <kbd>Enter</kbd> executes dispatch and returns focus to Omnibox. |
+| 2026-10-10 | Corrected field label from wireframe shorthand ("Launch Num -> Dispatch") to clean semantic "Launch Amount". |
+| 2026-10-10 | Resolved Route Focus Bleed-Through: Suppressed browser synthetic click (`e.detail === 0`) on `<button>` release, and disarmed Enter transitions (`routeReadyForEnter = false`) until Omnibox Enter key is fully released (`keyup` + 80ms buffer). Focus now stays rock-solid on the Route button until explicitly confirmed. |
+| 2026-10-10 | Resolved Arrow Key Inversion: Removed duplicate `keydown` handler on button elements that previously caused double bubbling to `window` (+2/-2 jump in 3-item array), restoring true unidirectional navigation (<kbd>→</kbd> moves right: `Guinsay` → `Taytay` → `Sabang`, <kbd>←</kbd> moves left: `Sabang` → `Taytay` → `Guinsay`). |
+| 2026-10-10 | Enforced Invariant Lockout & Full Card Visual Alert: When a driver is Suspended or Inactive, the entire Driver Info card illuminates with high-contrast alert styling (vibrant red for Suspended with `⛔ SUSPENDED` badge; amber for Inactive with `⚠️ INACTIVE` badge). Pressing <kbd>Enter</kbd> or clicking is strictly locked out (dual shake animation, blocking toast, hard-disabled dispatch controls). |
 
 ---
 
 ## 10. Open Questions / Next Steps
 
+- **Integrate into Next.js Production Components (`toda-app`)**:
+  - Update `controller-terminal.tsx` to mount the verified 3-card vertical stack (Omnibox -> Route Selector with arrow navigation & last-used memory -> Driver Profile & Launch Amount).
+  - Add Route column to `live-stack-feed.tsx` with separate unmerged rows and neutral slate badges.
+  - Implement Admin route settings modal in controller header.
 - **Supabase credentials**: Populate `.env.local` with real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- **Run quick fix**: Execute `supabase/quick_fix.sql` in the Supabase SQL Editor to clear the critical security linter warning and sync all user accounts into `user_profiles`.
+- **Run quick fix**: Execute `supabase/quick_fix.sql` in the Supabase SQL Editor.
 - **Git PR & Merge**: User reviews branch `dev` and merges into `main`.
 
 ---
