@@ -33,6 +33,10 @@ export function useDriverCache() {
             body_number,
             status,
             driver_profile_versions!inner (
+              first_name,
+              last_name,
+              middle_initial,
+              nickname,
               full_name,
               driver_photo_url,
               version
@@ -46,6 +50,10 @@ export function useDriverCache() {
         const map = new Map<string, DriverSummary>();
         (data || []).forEach((driver: Record<string, unknown>) => {
           const versions = driver.driver_profile_versions as Array<{
+            first_name?: string | null;
+            last_name?: string | null;
+            middle_initial?: string | null;
+            nickname?: string | null;
             full_name: string;
             driver_photo_url: string | null;
             version: number;
@@ -57,7 +65,11 @@ export function useDriverCache() {
           map.set(driver.body_number as string, {
             id: driver.id as string,
             body_number: driver.body_number as string,
-            full_name: latest.full_name,
+            first_name: latest.first_name || "",
+            last_name: latest.last_name || "",
+            middle_initial: latest.middle_initial || "—",
+            nickname: latest.nickname || "",
+            full_name: latest.full_name || `${latest.last_name || ""}, ${latest.first_name || ""}`,
             driver_photo_url: latest.driver_photo_url,
             status: driver.status as DriverSummary["status"],
           });
@@ -117,14 +129,17 @@ export function useDriverCache() {
       drivers.forEach((driver) => {
         const bn = driver.body_number.toLowerCase();
         const fn = driver.full_name.toLowerCase();
+        const first = (driver.first_name || "").toLowerCase();
+        const last = (driver.last_name || "").toLowerCase();
+        const nick = (driver.nickname || "").toLowerCase();
 
         if (bn === q) {
           exactBody.push(driver);
         } else if (bn.startsWith(q)) {
           prefixBody.push(driver);
-        } else if (fn.startsWith(q)) {
+        } else if (first.startsWith(q) || last.startsWith(q) || nick.startsWith(q) || fn.startsWith(q)) {
           prefixName.push(driver);
-        } else if (fn.includes(q)) {
+        } else if (first.includes(q) || last.includes(q) || nick.includes(q) || fn.includes(q)) {
           containsName.push(driver);
         } else if (bn.includes(q)) {
           containsBody.push(driver);

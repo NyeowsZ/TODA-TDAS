@@ -19,7 +19,10 @@ export function QuickDriverModal({
   onSuccessDispatch,
 }: QuickDriverModalProps) {
   const [bodyNumber, setBodyNumber] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [middleInitial, setMiddleInitial] = useState("");
+  const [nickname, setNickname] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [dispatchImmediately, setDispatchImmediately] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,11 +38,21 @@ export function QuickDriverModal({
 
       if (isDigits) {
         setBodyNumber(trimmed);
-        setFullName("");
+        setFirstName("");
+        setLastName("");
       } else {
         setBodyNumber("");
-        setFullName(trimmed);
+        const words = trimmed.split(" ").filter(Boolean);
+        if (words.length > 1) {
+          setFirstName(words[0]);
+          setLastName(words.slice(1).join(" "));
+        } else {
+          setFirstName(trimmed);
+          setLastName("");
+        }
       }
+      setMiddleInitial("");
+      setNickname("");
       setContactNumber("");
       setDispatchImmediately(true);
 
@@ -57,8 +70,8 @@ export function QuickDriverModal({
       setError("Body number is required");
       return;
     }
-    if (!fullName.trim()) {
-      setError("Driver full name is required");
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First Name and Last Name are required");
       return;
     }
 
@@ -68,7 +81,10 @@ export function QuickDriverModal({
     try {
       const regRes = await registerDriver({
         body_number: bodyNumber.trim(),
-        full_name: fullName.trim(),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        middle_initial: middleInitial.trim() || undefined,
+        nickname: nickname.trim() || undefined,
         contact_number: contactNumber.trim() || undefined,
       });
 
@@ -161,18 +177,60 @@ export function QuickDriverModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5 pl-1">
-              Driver Full Name
-            </label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Rodrigo Mendoza"
-              className="w-full bg-surface-subtle rounded-2xl px-4 py-3 text-sm font-bold text-text-primary border border-transparent focus:border-brand-primary focus:bg-white focus:outline-none transition-all"
-              required
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1 pl-1">
+                Last Name
+              </label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="e.g. Dela Cruz"
+                className="w-full bg-surface-subtle rounded-2xl px-3 py-2.5 text-sm font-bold text-text-primary border border-transparent focus:border-brand-primary focus:bg-white focus:outline-none transition-all"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1 pl-1">
+                First Name
+              </label>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="e.g. Juan"
+                className="w-full bg-surface-subtle rounded-2xl px-3 py-2.5 text-sm font-bold text-text-primary border border-transparent focus:border-brand-primary focus:bg-white focus:outline-none transition-all"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1 pl-1">
+                M.I.
+              </label>
+              <input
+                type="text"
+                value={middleInitial}
+                onChange={(e) => setMiddleInitial(e.target.value)}
+                placeholder="e.g. P."
+                className="w-full bg-surface-subtle rounded-2xl px-3 py-2.5 text-sm font-semibold text-text-primary border border-transparent focus:border-brand-primary focus:bg-white focus:outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1 pl-1">
+                Nickname
+              </label>
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="e.g. Johnny"
+                className="w-full bg-surface-subtle rounded-2xl px-3 py-2.5 text-sm font-semibold text-text-primary border border-transparent focus:border-brand-primary focus:bg-white focus:outline-none transition-all"
+              />
+            </div>
           </div>
 
           <div>

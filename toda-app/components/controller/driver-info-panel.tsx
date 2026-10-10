@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import type { DriverSummary } from "@/types/supabase";
-import { parseDriverName } from "./omnibox-search";
 import { User, AlertTriangle, AlertCircle, Check, Loader2 } from "lucide-react";
 import Image from "next/image";
 
@@ -75,7 +74,6 @@ export function DriverInfoPanel({
     }
   }, [isActive, amountRef]);
 
-  const parsed = driver ? parseDriverName(driver.full_name) : null;
   const isSuspended = driver?.status === "suspended";
   const isInactive = driver?.status === "inactive";
   const isBlocked = isSuspended || isInactive || !driver;
@@ -204,7 +202,7 @@ export function DriverInfoPanel({
                       : "text-blue-700"
                   }`}
                 >
-                  {parsed ? `"${parsed.nickname}"` : '""'}
+                  {driver?.nickname ? `"${driver.nickname}"` : '""'}
                 </span>
               </div>
 

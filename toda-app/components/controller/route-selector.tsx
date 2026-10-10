@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Settings, Plus, Trash2, X } from "lucide-react";
+import { getRoutes, createRoute, deleteRoute } from "@/lib/actions/dispatch-actions";
 
 export interface RouteSelectorProps {
   isActive: boolean;
@@ -14,7 +15,6 @@ export interface RouteSelectorProps {
 }
 
 const DEFAULT_ROUTES = ["Guinsay", "Taytay", "Sabang"];
-const STORAGE_ROUTES_KEY = "dacotoda_routes";
 const STORAGE_LAST_ROUTE_KEY = "dacotoda_last_route";
 
 export function RouteSelector({
@@ -26,20 +26,9 @@ export function RouteSelector({
   routes: externalRoutes,
   onRoutesUpdate,
 }: RouteSelectorProps) {
-  // Routes list
+  // Routes list - populated from database
   const [routes, setRoutes] = useState<string[]>(() => {
     if (externalRoutes && externalRoutes.length > 0) return externalRoutes;
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_ROUTES_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch (e) {
-        console.warn("Could not read routes from localStorage", e);
-      }
-    }
     return DEFAULT_ROUTES;
   });
 
@@ -49,6 +38,22 @@ export function RouteSelector({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Load real routes from Supabase database
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDbRoutes() {
+      const res = await getRoutes();
+      if (isMounted && res.success && res.data && res.data.length > 0) {
+        setRoutes(res.data);
+        if (onRoutesUpdate) onRoutesUpdate(res.data);
+      }
+    }
+    loadDbRoutes();
+    return () => {
+      isMounted = false;
+    };
+  }, [onRoutesUpdate]);
 
   // Keep routes synced with external updates if provided
   useEffect(() => {
@@ -152,26 +157,22 @@ export function RouteSelector({
     onAdvance();
   };
 
-  const handleAddRoute = () => {
+  const handleAddRoute = async () => {
     const trimmed = newRouteInput.trim();
     if (!trimmed || routes.some((r) => r.toLowerCase() === trimmed.toLowerCase())) return;
 
     const updated = [...routes, trimmed];
     setRoutes(updated);
-    try {
-      localStorage.setItem(STORAGE_ROUTES_KEY, JSON.stringify(updated));
-    } catch (_) {}
     if (onRoutesUpdate) onRoutesUpdate(updated);
     setNewRouteInput("");
+    await createRoute(trimmed);
   };
 
-  const handleDeleteRoute = (indexToRemove: number) => {
+  const handleDeleteRoute = async (indexToRemove: number) => {
     if (routes.length <= 1) return; // Keep at least one route
+    const routeToDelete = routes[indexToRemove];
     const updated = routes.filter((_, idx) => idx !== indexToRemove);
     setRoutes(updated);
-    try {
-      localStorage.setItem(STORAGE_ROUTES_KEY, JSON.stringify(updated));
-    } catch (_) {}
     if (onRoutesUpdate) onRoutesUpdate(updated);
 
     if (selectedIndex >= updated.length) {
@@ -181,6 +182,8 @@ export function RouteSelector({
         localStorage.setItem(STORAGE_LAST_ROUTE_KEY, fallback);
       } catch (_) {}
     }
+
+    await deleteRoute(routeToDelete);
   };
 
   return (

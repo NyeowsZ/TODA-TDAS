@@ -3,11 +3,11 @@
 import React, { useState, useMemo } from "react";
 import type { DispatchLog } from "@/types/supabase";
 import { formatManilaTime } from "@/lib/utils/format-timezone";
-import { parseDriverName } from "./omnibox-search";
 
 export interface StackFeedItem extends DispatchLog {
   body_number: string;
   driver_name: string;
+  nickname?: string | null;
   driver_photo_url: string | null;
   global_seq?: number;
   route?: string | null;
@@ -193,7 +193,6 @@ export function LiveStackFeed({
               </tr>
             ) : (
               pageItems.map((item) => {
-                const parsed = parseDriverName(item.driver_name);
                 const timeStr = item.logged_at
                   ? formatManilaTime(item.logged_at)
                   : "--:--";
@@ -222,9 +221,9 @@ export function LiveStackFeed({
                       ) : (
                         <>
                           <span>{item.driver_name}</span>{" "}
-                          {parsed.nickname && parsed.nickname !== "—" && (
+                          {item.nickname && (
                             <span className="text-slate-400 text-[11px] italic font-normal">
-                              (&quot;{parsed.nickname}&quot;)
+                              (&quot;{item.nickname}&quot;)
                             </span>
                           )}
                         </>

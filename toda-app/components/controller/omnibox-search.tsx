@@ -1,83 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { DriverSummary } from "@/types/supabase";
-
-export interface ParsedDriverName {
-  lastName: string;
-  firstName: string;
-  middleInitial: string;
-  nickname: string;
-}
-
-export function parseDriverName(fullName: string): ParsedDriverName {
-  let raw = (fullName || "").trim();
-  let nickname = "";
-
-  // Extract nickname if in quotes or parentheses e.g. "Johnny" or (Johnny)
-  const nickMatch = raw.match(/["'\(]([^"'\\)]+)["'\)]/);
-  if (nickMatch) {
-    nickname = nickMatch[1].trim();
-    raw = raw.replace(nickMatch[0], "").trim();
-  }
-
-  if (raw.includes(",")) {
-    const parts = raw.split(",");
-    const lastName = parts[0].trim();
-    const rest = parts.slice(1).join(" ").trim().split(/\s+/).filter(Boolean);
-    let middleInitial = "";
-    const firstNameParts: string[] = [];
-
-    for (const part of rest) {
-      if (/^[A-Za-z]\.?$/.test(part)) {
-        middleInitial = part.endsWith(".") ? part : `${part}.`;
-      } else {
-        firstNameParts.push(part);
-      }
-    }
-
-    const firstName = firstNameParts.join(" ") || rest.join(" ");
-    return {
-      lastName: lastName || "—",
-      firstName: firstName || "—",
-      middleInitial: middleInitial || "—",
-      nickname: nickname || (firstNameParts[0] ?? "—"),
-    };
-  } else {
-    const parts = raw.split(/\s+/).filter(Boolean);
-    if (parts.length === 0) {
-      return { lastName: "—", firstName: "—", middleInitial: "—", nickname: "—" };
-    }
-    if (parts.length === 1) {
-      return {
-        lastName: parts[0],
-        firstName: parts[0],
-        middleInitial: "—",
-        nickname: nickname || parts[0],
-      };
-    }
-
-    const lastName = parts[parts.length - 1];
-    let middleInitial = "";
-    const firstNameParts: string[] = [];
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      if (/^[A-Za-z]\.?$/.test(part) && i === parts.length - 2) {
-        middleInitial = part.endsWith(".") ? part : `${part}.`;
-      } else {
-        firstNameParts.push(part);
-      }
-    }
-
-    return {
-      lastName: lastName || "—",
-      firstName: firstNameParts.join(" ") || "—",
-      middleInitial: middleInitial || "—",
-      nickname: nickname || (firstNameParts[0] ?? "—"),
-    };
-  }
-}
 
 export interface OmniboxSearchProps {
   isActive: boolean;
@@ -312,7 +236,6 @@ export function OmniboxSearch({
             ) : (
               results.map((d, idx) => {
                 const isSelected = idx === selectedIndex;
-                const parsed = parseDriverName(d.full_name);
 
                 let rowStyle = "hover:bg-slate-50 text-slate-700 border-l-4 border-transparent pl-3";
                 if (isSelected) {
@@ -339,12 +262,12 @@ export function OmniboxSearch({
                     >
                       {d.body_number}
                     </span>
-                    <span className="col-span-3 truncate font-medium">{parsed.lastName}</span>
-                    <span className="col-span-3 truncate font-medium">{parsed.firstName}</span>
+                    <span className="col-span-3 truncate font-medium">{d.last_name || "—"}</span>
+                    <span className="col-span-3 truncate font-medium">{d.first_name || "—"}</span>
                     <span className="col-span-2 text-center font-mono opacity-80">
-                      {parsed.middleInitial}
+                      {d.middle_initial || "—"}
                     </span>
-                    <span className="col-span-2 truncate italic opacity-90">{parsed.nickname}</span>
+                    <span className="col-span-2 truncate italic opacity-90">{d.nickname || "—"}</span>
                   </div>
                 );
               })
