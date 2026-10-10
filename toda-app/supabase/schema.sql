@@ -138,7 +138,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_adjustments_date
 -- ----------------------------------------------------------------------------
 -- 9. LIGHTWEIGHT IN-MEMORY HYDRATION VIEW (INV-NET-02)
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE VIEW public.view_driver_active_summaries AS
+DROP VIEW IF EXISTS public.view_driver_active_summaries;
+CREATE VIEW public.view_driver_active_summaries
+WITH (security_invoker = true) AS
 SELECT
     d.id,
     d.body_number,
@@ -391,71 +393,128 @@ BEGIN
     FROM information_schema.columns 
     WHERE table_schema = 'auth' AND table_name = 'identities' AND column_name = 'id';
 
-    -- A. INSERT AUTH USERS
+    -- A. INSERT AUTH USERS WITH EXPLICIT NON-NULL TOKEN COLUMNS
+    -- Note: GoTrue requires confirmation_token, recovery_token, etc. to be '' (not NULL)
+    -- to avoid "Database error querying schema (Scan error on column converting NULL to string)"
+
     -- 1. Chairman
     INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
     ) VALUES (
         '00000000-0000-0000-0000-000000000000', uid_chairman, 'authenticated', 'authenticated',
         'chairman@toda.local', enc_pw, NOW(),
+        '', '', '', '',
         '{"provider":"email","providers":["email"]}'::jsonb,
         '{"full_name":"Manuel Roxas (Chairman)","role":"chairman"}'::jsonb,
         NOW(), NOW()
-    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+    ) ON CONFLICT (id) DO UPDATE SET
+        encrypted_password = enc_pw,
+        email_confirmed_at = NOW(),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = '';
 
     -- 2. Secretary
     INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
     ) VALUES (
         '00000000-0000-0000-0000-000000000000', uid_secretary, 'authenticated', 'authenticated',
         'secretary@toda.local', enc_pw, NOW(),
+        '', '', '', '',
         '{"provider":"email","providers":["email"]}'::jsonb,
         '{"full_name":"Corazon Aquino (Secretary)","role":"secretary"}'::jsonb,
         NOW(), NOW()
-    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+    ) ON CONFLICT (id) DO UPDATE SET
+        encrypted_password = enc_pw,
+        email_confirmed_at = NOW(),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = '';
 
     -- 3. Auditor / Official
     INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
     ) VALUES (
         '00000000-0000-0000-0000-000000000000', uid_auditor, 'authenticated', 'authenticated',
         'auditor@toda.local', enc_pw, NOW(),
+        '', '', '', '',
         '{"provider":"email","providers":["email"]}'::jsonb,
         '{"full_name":"Ramon Magsaysay (Auditor)","role":"auditor"}'::jsonb,
         NOW(), NOW()
-    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+    ) ON CONFLICT (id) DO UPDATE SET
+        encrypted_password = enc_pw,
+        email_confirmed_at = NOW(),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = '';
 
     -- 4. Controller 1 (Terminal Booth 1)
     INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
     ) VALUES (
         '00000000-0000-0000-0000-000000000000', uid_controller1, 'authenticated', 'authenticated',
         'controller1@toda.local', enc_pw, NOW(),
+        '', '', '', '',
         '{"provider":"email","providers":["email"]}'::jsonb,
         '{"full_name":"Juan Dispatcher (Booth 1)","role":"controller"}'::jsonb,
         NOW(), NOW()
-    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+    ) ON CONFLICT (id) DO UPDATE SET
+        encrypted_password = enc_pw,
+        email_confirmed_at = NOW(),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = '';
 
     -- 5. Controller 2 (Terminal Booth 2)
     INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
     ) VALUES (
         '00000000-0000-0000-0000-000000000000', uid_controller2, 'authenticated', 'authenticated',
         'controller2@toda.local', enc_pw, NOW(),
+        '', '', '', '',
         '{"provider":"email","providers":["email"]}'::jsonb,
         '{"full_name":"Pedro Dispatcher (Booth 2)","role":"controller"}'::jsonb,
         NOW(), NOW()
-    ) ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+    ) ON CONFLICT (id) DO UPDATE SET
+        encrypted_password = enc_pw,
+        email_confirmed_at = NOW(),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = '';
+
+    -- REPAIR: Fix any NULL token columns for all seed users
+    UPDATE auth.users
+    SET 
+        confirmation_token = COALESCE(confirmation_token, ''),
+        recovery_token = COALESCE(recovery_token, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        email_change = COALESCE(email_change, '')
+    WHERE email LIKE '%@toda.local';
 
     -- B. INSERT AUTH IDENTITIES (Enables password sign-in with dynamic UUID/text compatibility)
     IF id_data_type = 'uuid' THEN

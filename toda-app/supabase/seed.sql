@@ -25,18 +25,35 @@ BEGIN
     FROM information_schema.columns 
     WHERE table_schema = 'auth' AND table_name = 'identities' AND column_name = 'id';
 
-    -- 1. AUTH USERS
+    -- 1. AUTH USERS WITH NON-NULL TOKEN COLUMNS
     INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
     ) VALUES 
-        ('00000000-0000-0000-0000-000000000000', uid_chairman, 'authenticated', 'authenticated', 'chairman@toda.local', enc_pw, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Manuel Roxas","role":"chairman"}'::jsonb, NOW(), NOW()),
-        ('00000000-0000-0000-0000-000000000000', uid_secretary, 'authenticated', 'authenticated', 'secretary@toda.local', enc_pw, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Corazon Aquino","role":"secretary"}'::jsonb, NOW(), NOW()),
-        ('00000000-0000-0000-0000-000000000000', uid_auditor, 'authenticated', 'authenticated', 'auditor@toda.local', enc_pw, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Ramon Magsaysay","role":"auditor"}'::jsonb, NOW(), NOW()),
-        ('00000000-0000-0000-0000-000000000000', uid_controller1, 'authenticated', 'authenticated', 'controller1@toda.local', enc_pw, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Juan Dispatcher (Booth 1)","role":"controller"}'::jsonb, NOW(), NOW()),
-        ('00000000-0000-0000-0000-000000000000', uid_controller2, 'authenticated', 'authenticated', 'controller2@toda.local', enc_pw, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Pedro Dispatcher (Booth 2)","role":"controller"}'::jsonb, NOW(), NOW())
-    ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
+        ('00000000-0000-0000-0000-000000000000', uid_chairman, 'authenticated', 'authenticated', 'chairman@toda.local', enc_pw, NOW(), '', '', '', '', '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Manuel Roxas","role":"chairman"}'::jsonb, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000000', uid_secretary, 'authenticated', 'authenticated', 'secretary@toda.local', enc_pw, NOW(), '', '', '', '', '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Corazon Aquino","role":"secretary"}'::jsonb, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000000', uid_auditor, 'authenticated', 'authenticated', 'auditor@toda.local', enc_pw, NOW(), '', '', '', '', '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Ramon Magsaysay","role":"auditor"}'::jsonb, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000000', uid_controller1, 'authenticated', 'authenticated', 'controller1@toda.local', enc_pw, NOW(), '', '', '', '', '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Juan Dispatcher (Booth 1)","role":"controller"}'::jsonb, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000000', uid_controller2, 'authenticated', 'authenticated', 'controller2@toda.local', enc_pw, NOW(), '', '', '', '', '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Pedro Dispatcher (Booth 2)","role":"controller"}'::jsonb, NOW(), NOW())
+    ON CONFLICT (id) DO UPDATE SET
+        encrypted_password = enc_pw,
+        email_confirmed_at = NOW(),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = '';
+
+    -- REPAIR: Fix any NULL token columns for all seed users
+    UPDATE auth.users
+    SET 
+        confirmation_token = COALESCE(confirmation_token, ''),
+        recovery_token = COALESCE(recovery_token, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        email_change = COALESCE(email_change, '')
+    WHERE email LIKE '%@toda.local';
 
     -- 2. AUTH IDENTITIES
     IF id_data_type = 'uuid' THEN
