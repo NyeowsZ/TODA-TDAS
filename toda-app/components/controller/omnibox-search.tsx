@@ -1,15 +1,96 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import type { DriverSummary } from "@/types/supabase";
-import { Search, ChevronLeft, ChevronRight, UserPlus, CornerDownLeft, User } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-interface OmniboxSearchProps {
-  onDispatch: (driver: DriverSummary) => void;
-  onOpenQuickRegister: (prefill: string) => void;
+export interface ParsedDriverName {
+  lastName: string;
+  firstName: string;
+  middleInitial: string;
+  nickname: string;
+}
+
+export function parseDriverName(fullName: string): ParsedDriverName {
+  let raw = (fullName || "").trim();
+  let nickname = "";
+
+  // Extract nickname if in quotes or parentheses e.g. "Johnny" or (Johnny)
+  const nickMatch = raw.match(/["'\(]([^"'\\)]+)["'\)]/);
+  if (nickMatch) {
+    nickname = nickMatch[1].trim();
+    raw = raw.replace(nickMatch[0], "").trim();
+  }
+
+  if (raw.includes(",")) {
+    const parts = raw.split(",");
+    const lastName = parts[0].trim();
+    const rest = parts.slice(1).join(" ").trim().split(/\s+/).filter(Boolean);
+    let middleInitial = "";
+    const firstNameParts: string[] = [];
+
+    for (const part of rest) {
+      if (/^[A-Za-z]\.?$/.test(part)) {
+        middleInitial = part.endsWith(".") ? part : `${part}.`;
+      } else {
+        firstNameParts.push(part);
+      }
+    }
+
+    const firstName = firstNameParts.join(" ") || rest.join(" ");
+    return {
+      lastName: lastName || "—",
+      firstName: firstName || "—",
+      middleInitial: middleInitial || "—",
+      nickname: nickname || (firstNameParts[0] ?? "—"),
+    };
+  } else {
+    const parts = raw.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) {
+      return { lastName: "—", firstName: "—", middleInitial: "—", nickname: "—" };
+    }
+    if (parts.length === 1) {
+      return {
+        lastName: parts[0],
+        firstName: parts[0],
+        middleInitial: "—",
+        nickname: nickname || parts[0],
+      };
+    }
+
+    const lastName = parts[parts.length - 1];
+    let middleInitial = "";
+    const firstNameParts: string[] = [];
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      if (/^[A-Za-z]\.?$/.test(part) && i === parts.length - 2) {
+        middleInitial = part.endsWith(".") ? part : `${part}.`;
+      } else {
+        firstNameParts.push(part);
+      }
+    }
+
+    return {
+      lastName: lastName || "—",
+      firstName: firstNameParts.join(" ") || "—",
+      middleInitial: middleInitial || "—",
+      nickname: nickname || (firstNameParts[0] ?? "—"),
+    };
+  }
+}
+
+export interface OmniboxSearchProps {
+  isActive?: boolean;
   searchDrivers: (query: string) => DriverSummary[];
-  pagination: {
+  selectedDriver?: DriverSummary | null;
+  onDriverSelect?: (driver: DriverSummary | null) => void;
+  onAdvanceToRoute?: (driver: DriverSummary) => void;
+  onLockoutAlert?: (message: string) => void;
+  onOpenQuickRegister?: (prefill: string) => void;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  // Compatibility during staged rollout
+  onDispatch?: (driver: DriverSummary) => void;
+  pagination?: {
     currentPage: number;
     totalPages: number;
     onPageChange: (page: number) => void;
@@ -18,23 +99,36 @@ interface OmniboxSearchProps {
 }
 
 export function OmniboxSearch({
-  onDispatch,
-  onOpenQuickRegister,
+  isActive = true,
   searchDrivers,
+  selectedDriver,
+  onDriverSelect,
+  onAdvanceToRoute,
+  onLockoutAlert,
+  onOpenQuickRegister,
+  inputRef: externalInputRef,
+  onDispatch,
   pagination,
   isSubmitting = false,
 }: OmniboxSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<DriverSummary[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [showPageMenu, setShowPageMenu] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const pageMenuRef = useRef<HTMLDivElement>(null);
+  const internalInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = externalInputRef || internalInputRef;
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // Global focus shortcut: Press '/' or 'Ctrl+K' / 'Cmd+K' anywhere
+  // Focus input when isActive becomes true
+  useEffect(() => {
+    if (isActive && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isActive, inputRef]);
+
+  // Global focus shortcut: Press '/' or 'Ctrl+K'
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (
@@ -48,309 +142,229 @@ export function OmniboxSearch({
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, []);
+  }, [inputRef]);
 
-  // Close page menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (pageMenuRef.current && !pageMenuRef.current.contains(e.target as Node)) {
-        setShowPageMenu(false);
-      }
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) && e.target !== inputRef.current) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Update live suggestions as user types
+  // Update suggestions on query change
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
       setResults([]);
-      setIsOpen(false);
+      setSelectedIndex(0);
+      if (onDriverSelect) onDriverSelect(null);
       return;
     }
+
     const matches = searchDrivers(trimmed);
     setResults(matches);
     setSelectedIndex(0);
-    setIsOpen(true);
-  }, [query, searchDrivers]);
 
-  const handleSelect = (driver: DriverSummary) => {
-    if (isSubmitting) return;
-    onDispatch(driver);
-    setQuery("");
-    setResults([]);
-    setIsOpen(false);
+    if (matches.length > 0) {
+      if (onDriverSelect) onDriverSelect(matches[0]);
+    } else {
+      if (onDriverSelect) onDriverSelect(null);
+    }
+  }, [query, searchDrivers, onDriverSelect]);
+
+  const triggerShake = () => {
+    setIsShaking(true);
+    setTimeout(() => setIsShaking(false), 350);
   };
 
-  const handleRegisterNew = () => {
-    const trimmed = query.trim();
-    setIsOpen(false);
-    setQuery("");
-    setResults([]);
-    onOpenQuickRegister(trimmed);
-  };
+  const handleSelectDriver = (driver: DriverSummary) => {
+    if (onDriverSelect) onDriverSelect(driver);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") {
-      setIsOpen(false);
+    // Hard lockout check
+    if (driver.status === "suspended" || driver.status === "inactive") {
+      triggerShake();
+      if (onLockoutAlert) {
+        onLockoutAlert(`⛔ BLOCKED: Unit #${driver.body_number} is ${driver.status.toUpperCase()}! Entry not permitted.`);
+      }
       return;
     }
 
-    if (isOpen && (results.length > 0 || query.trim() !== "")) {
-      // Total items: matching drivers + "Add new driver" row
-      const totalItems = results.length + 1;
+    if (onAdvanceToRoute) {
+      onAdvanceToRoute(driver);
+    } else if (onDispatch) {
+      onDispatch(driver);
+    }
+  };
 
-      if (e.key === "Tab") {
-        e.preventDefault();
-        if (!e.shiftKey) {
-          setSelectedIndex((prev) => (prev + 1) % totalItems);
-        } else {
-          setSelectedIndex((prev) => (prev - 1 + totalItems) % totalItems);
-        }
-        return;
-      }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const trimmed = query.trim();
 
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % totalItems);
-        return;
-      }
-
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + totalItems) % totalItems);
-        return;
-      }
-
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (!query.trim()) return;
-
-        if (results.length > 0 && selectedIndex < results.length) {
-          handleSelect(results[selectedIndex]);
-        } else {
-          handleRegisterNew();
-        }
-        return;
-      }
-    } else if (e.key === "Enter" && query.trim()) {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
-      const matches = searchDrivers(query.trim());
-      if (matches.length > 0) {
-        handleSelect(matches[0]);
-      } else {
-        handleRegisterNew();
+      if (results.length > 0) {
+        const nextIdx = (selectedIndex + 1) % results.length;
+        setSelectedIndex(nextIdx);
+        if (onDriverSelect) onDriverSelect(results[nextIdx]);
+        // Scroll item into view
+        const child = listRef.current?.children[nextIdx] as HTMLElement | undefined;
+        child?.scrollIntoView({ block: "nearest" });
       }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (results.length > 0) {
+        const prevIdx = (selectedIndex - 1 + results.length) % results.length;
+        setSelectedIndex(prevIdx);
+        if (onDriverSelect) onDriverSelect(results[prevIdx]);
+        const child = listRef.current?.children[prevIdx] as HTMLElement | undefined;
+        child?.scrollIntoView({ block: "nearest" });
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+
+      // Empty guard: Do nothing if empty, trigger shake
+      if (!trimmed) {
+        triggerShake();
+        return;
+      }
+
+      if (results.length > 0) {
+        const target = results[selectedIndex];
+        handleSelectDriver(target);
+      } else {
+        // No match found -> if quick register handler exists
+        if (onOpenQuickRegister) {
+          onOpenQuickRegister(trimmed);
+        } else {
+          triggerShake();
+        }
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setQuery("");
+      setResults([]);
+      if (onDriverSelect) onDriverSelect(null);
     }
   };
 
   return (
-    <div className="relative w-full max-w-3xl mx-auto my-3 px-2 sm:px-0">
-      <div className="flex items-center gap-2">
-        {/* Pagination Pill (← [ Page 1 ] →) */}
-        {pagination.totalPages > 0 && (
-          <div ref={pageMenuRef} className="relative flex items-center shrink-0">
-            <div className="flex items-center bg-white border border-border-subtle rounded-2xl h-12 px-1.5 shadow-sm">
-              {/* Prev Button */}
-              <button
-                type="button"
-                disabled={pagination.currentPage <= 1}
-                onClick={() => pagination.onPageChange(Math.max(1, pagination.currentPage - 1))}
-                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-surface-subtle disabled:opacity-30 disabled:cursor-not-allowed text-text-secondary transition-colors cursor-pointer"
-                title="Previous Sheet (90 lines)"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+    <div
+      id="omnibox-card"
+      className={`shrink-0 bg-white rounded-2xl p-3.5 shadow-xs transition-all duration-200 flex flex-col ${
+        isActive
+          ? "border-2 border-blue-500 ring-4 ring-blue-50"
+          : "border border-slate-200"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <label htmlFor="search-box" className="text-xs font-bold uppercase tracking-wider text-slate-700">
+          Omnibox
+        </label>
+        <span className="text-xs text-slate-400 font-medium">
+          Press{" "}
+          <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-mono text-xs font-bold">
+            /
+          </kbd>
+        </span>
+      </div>
 
-              {/* Sheet Indicator */}
-              <button
-                type="button"
-                onClick={() => setShowPageMenu((prev) => !prev)}
-                className="px-2.5 py-1 text-xs font-bold font-mono text-text-primary hover:bg-surface-subtle rounded-xl transition-colors cursor-pointer flex items-center gap-1"
-                title="Jump to Sheet"
-              >
-                <span>Sheet {pagination.currentPage}</span>
-              </button>
+      {/* Input Box */}
+      <div className={`relative ${isShaking ? "shake" : ""}`}>
+        <input
+          ref={inputRef}
+          id="search-box"
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search body no. or driver name..."
+          autoComplete="off"
+          className="w-full h-11 bg-slate-50 border rounded-xl px-3.5 text-base font-semibold text-slate-900 placeholder:text-slate-400 transition-all font-mono outline-none border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-3 focus:ring-blue-100 shadow-xs"
+        />
+        <div className="absolute right-3 top-3 text-xs text-slate-400 font-bold pointer-events-none font-mono">
+          ↵ Enter
+        </div>
+      </div>
 
-              {/* Next Button */}
-              <button
-                type="button"
-                disabled={pagination.currentPage >= pagination.totalPages}
-                onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.currentPage + 1))}
-                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-surface-subtle disabled:opacity-30 disabled:cursor-not-allowed text-text-secondary transition-colors cursor-pointer"
-                title="Next Sheet (90 lines)"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Query Results (Fixed 3-Row Height: 120px) */}
+      <div className="mt-2.5">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+            Matching Units
+          </span>
+          <span className="text-xs font-medium text-slate-400">
+            {query.trim()
+              ? `${results.length} unit(s) found`
+              : "Type to search"}
+          </span>
+        </div>
 
-            {/* Quick Page Jump Dropdown */}
-            {showPageMenu && (
-              <div className="absolute left-0 top-full mt-2 w-52 max-h-60 overflow-y-auto bg-white border border-border-subtle rounded-2xl shadow-xl z-50 py-1.5 text-xs divide-y divide-surface-subtle animate-scale-in">
-                {Array.from({ length: pagination.totalPages }, (_, i) => {
-                  const p = i + 1;
-                  const startSeq = (p - 1) * 90 + 1;
-                  const endSeq = p * 90;
-                  const isSelected = p === pagination.currentPage;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => {
-                        pagination.onPageChange(p);
-                        setShowPageMenu(false);
-                      }}
-                      className={cn(
-                        "w-full px-3.5 py-2.5 text-left flex items-center justify-between transition-colors cursor-pointer",
-                        isSelected
-                          ? "bg-brand-soft text-brand-primary font-bold"
-                          : "hover:bg-surface-subtle text-text-primary"
-                      )}
-                    >
-                      <span>Sheet {p}</span>
-                      <span className="font-mono text-[11px] text-text-muted">
-                        Lines {startSeq}–{endSeq}
-                      </span>
-                    </button>
-                  );
-                })}
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+          {/* Table Header: Full Readable Names */}
+          <div className="grid grid-cols-12 bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+            <span className="col-span-2 font-mono">Body No.</span>
+            <span className="col-span-3">Last Name</span>
+            <span className="col-span-3">First Name</span>
+            <span className="col-span-2 text-center font-mono">M.I.</span>
+            <span className="col-span-2">Nickname</span>
+          </div>
+
+          {/* List Container: STRICT FIXED HEIGHT (h-[120px], scrollable) */}
+          <div
+            ref={listRef}
+            id="results-rows"
+            className="h-[120px] min-h-[120px] max-h-[120px] overflow-y-auto divide-y divide-slate-100 bg-white"
+          >
+            {!query.trim() ? (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400 font-medium p-4 font-mono">
+                Enter body # or driver name
               </div>
+            ) : results.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-xs text-slate-400 font-medium p-3 gap-1">
+                <span>No driver matching &quot;{query}&quot;</span>
+                {onOpenQuickRegister && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenQuickRegister(query.trim())}
+                    className="text-blue-600 hover:underline font-bold text-xs cursor-pointer"
+                  >
+                    + Register new driver
+                  </button>
+                )}
+              </div>
+            ) : (
+              results.map((d, idx) => {
+                const isSelected = idx === selectedIndex;
+                const parsed = parseDriverName(d.full_name);
+
+                let rowStyle = "hover:bg-slate-50 text-slate-700 border-l-4 border-transparent pl-3";
+                if (isSelected) {
+                  if (isActive) {
+                    rowStyle = "bg-slate-100 text-slate-900 font-semibold border-l-4 border-blue-400 pl-3";
+                  } else {
+                    rowStyle = "bg-blue-50/80 text-blue-950 font-bold border-l-4 border-blue-600 pl-3";
+                  }
+                }
+
+                return (
+                  <div
+                    key={d.id}
+                    onClick={() => {
+                      setSelectedIndex(idx);
+                      handleSelectDriver(d);
+                    }}
+                    className={`h-[40px] grid grid-cols-12 px-3 py-2 text-xs cursor-pointer transition-colors items-center ${rowStyle}`}
+                  >
+                    <span
+                      className={`col-span-2 font-mono font-bold ${
+                        isSelected ? "text-blue-700" : "text-slate-800"
+                      }`}
+                    >
+                      {d.body_number}
+                    </span>
+                    <span className="col-span-3 truncate font-medium">{parsed.lastName}</span>
+                    <span className="col-span-3 truncate font-medium">{parsed.firstName}</span>
+                    <span className="col-span-2 text-center font-mono opacity-80">
+                      {parsed.middleInitial}
+                    </span>
+                    <span className="col-span-2 truncate italic opacity-90">{parsed.nickname}</span>
+                  </div>
+                );
+              })
             )}
           </div>
-        )}
-
-        {/* Clean Omnibox Input */}
-        <div className="relative flex-1">
-          <div className="relative flex items-center">
-            <span className="absolute left-4 text-text-muted pointer-events-none">
-              <Search className="w-4 h-4" />
-            </span>
-
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => {
-                if (query.trim()) setIsOpen(true);
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="Search body # or driver name... (Press / to focus)"
-              className="w-full h-12 bg-white border border-border-subtle rounded-2xl pl-11 pr-24 text-sm font-semibold text-text-primary placeholder:text-text-muted placeholder:font-normal focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-blue-100 shadow-sm transition-all"
-              autoComplete="off"
-            />
-
-            <div className="absolute right-3.5 flex items-center gap-1.5 pointer-events-none">
-              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold text-text-muted bg-surface-subtle border border-border-subtle rounded-lg">
-                /
-              </kbd>
-            </div>
-          </div>
-
-          {/* Autocomplete Dropdown */}
-          {isOpen && query.trim() !== "" && (
-            <div
-              ref={dropdownRef}
-              className="absolute left-0 right-0 mt-2 bg-white border border-border-subtle rounded-2xl shadow-xl overflow-hidden z-50 text-sm divide-y divide-surface-subtle animate-scale-in"
-            >
-              {results.length > 0 && (
-                <div className="max-h-72 overflow-y-auto">
-                  {results.map((driver, idx) => {
-                    const isSelected = idx === selectedIndex;
-                    const isSuspended = driver.status === "suspended";
-
-                    return (
-                      <div
-                        key={driver.id}
-                        onClick={() => handleSelect(driver)}
-                        onMouseEnter={() => setSelectedIndex(idx)}
-                        className={cn(
-                          "px-4 py-3 cursor-pointer flex items-center justify-between transition-colors border-l-4",
-                          isSelected
-                            ? "bg-brand-soft/80 text-brand-primary border-brand-primary font-bold"
-                            : "hover:bg-surface-subtle text-text-primary border-transparent"
-                        )}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Photo / Avatar */}
-                          {driver.driver_photo_url ? (
-                            <img
-                              src={driver.driver_photo_url}
-                              alt={driver.full_name}
-                              className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-border-subtle"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-surface-subtle flex items-center justify-center shrink-0">
-                              <User className="w-4 h-4 text-text-muted" />
-                            </div>
-                          )}
-
-                          {/* Body Number */}
-                          <span className="font-mono font-extrabold text-sm w-16 shrink-0 text-text-primary">
-                            #{driver.body_number}
-                          </span>
-
-                          {/* Name & Status */}
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="truncate">{driver.full_name}</span>
-                            {isSuspended && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-status-danger-bg text-status-danger-text rounded-md uppercase">
-                                Suspended
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Dispatch shortcut tag */}
-                        <div className="flex items-center gap-1 shrink-0 ml-3 text-xs font-mono">
-                          <span
-                            className={cn(
-                              "flex items-center gap-1",
-                              isSelected ? "text-brand-primary font-bold" : "text-text-muted"
-                            )}
-                          >
-                            <CornerDownLeft className="w-3.5 h-3.5" />
-                            dispatch
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Add New Driver Option */}
-              <div
-                onClick={handleRegisterNew}
-                onMouseEnter={() => setSelectedIndex(results.length)}
-                className={cn(
-                  "px-4 py-3 cursor-pointer flex items-center justify-between transition-colors border-l-4",
-                  selectedIndex === results.length
-                    ? "bg-brand-soft/80 text-brand-primary border-brand-primary font-bold"
-                    : "hover:bg-surface-subtle text-text-secondary border-transparent"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-brand-primary shrink-0" />
-                  <span className="text-brand-primary font-bold">
-                    + Register new driver
-                  </span>
-                  <span className="text-xs text-text-muted font-mono truncate">
-                    (&ldquo;{query.trim()}&rdquo;)
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 text-xs font-mono text-text-muted">
-                  <CornerDownLeft className="w-3.5 h-3.5" />
-                  register
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
