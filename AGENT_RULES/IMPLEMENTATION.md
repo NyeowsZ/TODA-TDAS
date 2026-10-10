@@ -141,36 +141,43 @@
 
 ---
 
-## 7. Step-by-Step Implementation Checklist
+## 7. Step-by-Step Implementation Checklist & Microcommits Log
 
-- [ ] **Step 1: Git Branch Setup**: Create and switch to `feature/controller-terminal-refactor` from `dev`.
-- [ ] **Step 2: Routes State & Database Schema**: Ensure `route` string is accepted in `dispatch_logs` and fallback default routes are seeded (`Guinsay`, `Taytay`, `Sabang`).
-- [ ] **Step 3: Build Route Selector Component (`route-selector.tsx`)**:
-  - Implement horizontal buttons grid.
-  - Implement <kbd>←</kbd> and <kbd>→</kbd> arrow key navigation.
-  - Implement last-used route memory (`localStorage` + component state).
-  - Implement synthetic click suppression (`e.detail === 0`) and Enter keyup arming buffer.
-- [ ] **Step 4: Refactor Omnibox Search (`omnibox-search.tsx`)**:
-  - Set fixed 3-row stock height (`h-[120px]`).
-  - Add readable table headers: `Body No.`, `Last Name`, `First Name`, `M.I.`, `Nickname`.
-  - Add Empty <kbd>Enter</kbd> validation guard with shake animation.
-  - Add Suspended/Inactive validation guard that blocks <kbd>Enter</kbd> transition.
-- [ ] **Step 5: Refactor Driver Info & Launch Amount (`driver-info-panel.tsx`)**:
-  - Implement full-card dynamic light-up for Suspended (Red) and Inactive (Amber).
-  - Ensure zero redundant badge for Active drivers.
-  - Implement Launch Amount field with highlighted `1` on focus.
-  - Implement 500ms anti-spam submission debounce and lock.
-- [ ] **Step 6: Refactor Live Stack Feed (`live-stack-feed.tsx`)**:
-  - Implement 30 / 50 sheet pagination pill with sheet switcher.
-  - Display distinct, unmerged sequential rows.
-  - Render clean neutral slate launch badges (zero yellowing).
-  - Display Route badge per row.
-- [ ] **Step 7: Wire Terminal Master Shell (`controller-terminal.tsx`)**:
-  - Assemble the 2-column layout with `100dvh` lock.
-  - Implement complete keyboard focus loop: Omnibox -> Route -> Amount -> Omnibox.
-- [ ] **Step 8: TypeScript & Build Validation**:
-  - Run `npx tsc --noEmit` to ensure 0 type errors.
-  - Run `npm run build` to verify all Next.js App Router routes pass production compilation.
-- [ ] **Step 9: Commit & Push**:
-  - Commit all changes to `feature/controller-terminal-refactor`.
-  - Push branch to `origin feature/controller-terminal-refactor` ready for user PR into `dev`.
+- [x] **Step 1: Git Branch Setup**: Created and switched to `feature/controller-terminal-refactor` from `dev` (`7ee8938`).
+- [x] **Step 2: Routes State & Database Schema**: Updated `validators.ts`, `dispatch-actions.ts`, `schema.sql`, and `types/supabase.ts` with resilient `route` parameter support.
+  - Commit: `0cb9c21` (`feat(actions): support route parameter in logDispatch action and validation schema`)
+- [x] **Step 3: Build Route Selector Component (`route-selector.tsx`)**:
+  - Horizontal buttons grid with last-used route memory (`localStorage` key `dacotoda_last_route`).
+  - True unidirectional <kbd>←</kbd> and <kbd>→</kbd> arrow key navigation.
+  - Synthetic click suppression (`e.detail === 0`) and Enter keyup arming buffer.
+  - Admin CRUD modal for routes.
+  - Commit: `9935a20` (`feat(controller): add RouteSelector component with keyboard navigation and persistence`)
+- [x] **Step 4: Refactor Omnibox Search (`omnibox-search.tsx`)**:
+  - Fixed 3-row stock table (`h-[120px]`).
+  - Readable table headers: `Body No.`, `Last Name`, `First Name`, `M.I.`, `Nickname`.
+  - Empty <kbd>Enter</kbd> validation guard with pulse-shake animation.
+  - Inactive / Suspended hard lockout: shake animation + alert notification, prevents advance.
+  - Added `.shake` utility to `globals.css`.
+  - Commit: `004107c` (`feat(controller): update OmniboxSearch with fixed 3-row stock table and invariant lockout`)
+- [x] **Step 5: Build Driver Info & Launch Amount (`driver-info-panel.tsx`)**:
+  - Full-card dynamic light-up: vibrant red for Suspended (`⛔ SUSPENDED`), bright amber for Inactive (`⚠️ INACTIVE`), clean slate with zero redundant badge for Active.
+  - Standard clean label "Launch Amount" with auto-selected `1` on focus (`amountInput.select()`).
+  - 500ms anti-spam lock with subtle "Logged" indicator.
+  - Commit: `a053bc6` (`feat(controller): add DriverInfoPanel with dynamic alert illumination and launch amount`)
+- [x] **Step 6: Refactor Live Stack Feed (`live-stack-feed.tsx`)**:
+  - 30 / 50 sheet pagination pill (`[ 30 | 50 ]` and `‹ Sheet X (1–30) ›`).
+  - Distinct unmerged sequential rows with unique line numbers.
+  - Route column badge.
+  - Clean neutral slate launch multiplier badges (zero yellowing).
+  - Commit: `7388352` (`feat(controller): update LiveStackFeed with 30/50 sheet pagination and neutral badges`)
+- [x] **Step 7: Wire Terminal Master Shell (`controller-terminal.tsx`)**:
+  - Strict `100dvh` viewport layout (`h-screen max-h-[100dvh] overflow-hidden`).
+  - Seamless keyboard focus cycle: Omnibox -> Route -> Amount -> Omnibox.
+  - Live Manila clock (`HH:mm:ss GMT+8`), driver cache indicator, and 2-minute soft-undo integration.
+  - Commit: `afd4991` (`feat(controller): assemble 3-card vertical terminal with strict 100dvh layout`)
+- [x] **Step 8: TypeScript & Production Build Verification**:
+  - `npx tsc --noEmit` verified with 0 errors.
+  - `npm run build` compiled 100% of routes cleanly into production bundle.
+- [x] **Step 9: Remote Push**:
+  - All 6 microcommits pushed to `origin feature/controller-terminal-refactor`.
+  - Ready for user Pull Request into `dev`.
