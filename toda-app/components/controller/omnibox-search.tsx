@@ -80,26 +80,18 @@ export function parseDriverName(fullName: string): ParsedDriverName {
 }
 
 export interface OmniboxSearchProps {
-  isActive?: boolean;
+  isActive: boolean;
   searchDrivers: (query: string) => DriverSummary[];
-  selectedDriver?: DriverSummary | null;
-  onDriverSelect?: (driver: DriverSummary | null) => void;
-  onAdvanceToRoute?: (driver: DriverSummary) => void;
+  selectedDriver: DriverSummary | null;
+  onDriverSelect: (driver: DriverSummary | null) => void;
+  onAdvanceToRoute: (driver: DriverSummary) => void;
   onLockoutAlert?: (message: string) => void;
   onOpenQuickRegister?: (prefill: string) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
-  // Compatibility during staged rollout
-  onDispatch?: (driver: DriverSummary) => void;
-  pagination?: {
-    currentPage: number;
-    totalPages: number;
-    onPageChange: (page: number) => void;
-  };
-  isSubmitting?: boolean;
 }
 
 export function OmniboxSearch({
-  isActive = true,
+  isActive,
   searchDrivers,
   selectedDriver,
   onDriverSelect,
@@ -107,9 +99,6 @@ export function OmniboxSearch({
   onLockoutAlert,
   onOpenQuickRegister,
   inputRef: externalInputRef,
-  onDispatch,
-  pagination,
-  isSubmitting = false,
 }: OmniboxSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<DriverSummary[]>([]);
@@ -182,11 +171,7 @@ export function OmniboxSearch({
       return;
     }
 
-    if (onAdvanceToRoute) {
-      onAdvanceToRoute(driver);
-    } else if (onDispatch) {
-      onDispatch(driver);
-    }
+    onAdvanceToRoute(driver);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
