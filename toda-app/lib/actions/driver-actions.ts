@@ -88,6 +88,7 @@ export async function registerDriver(input: {
     return { success: false, error: versionError.message };
   }
 
+  revalidatePath("/controller");
   revalidatePath("/official/drivers");
   return {
     success: true,

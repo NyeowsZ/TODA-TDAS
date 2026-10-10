@@ -101,20 +101,55 @@ export function useDriverCache() {
   );
 
   /**
-   * Search drivers by body number prefix (for typeahead).
+   * Search drivers by body number or full name (for omnibox typeahead).
+   */
+  const searchDrivers = useCallback(
+    (query: string): DriverSummary[] => {
+      const q = query.trim().toLowerCase();
+      if (!q) return [];
+
+      const exactBody: DriverSummary[] = [];
+      const prefixBody: DriverSummary[] = [];
+      const prefixName: DriverSummary[] = [];
+      const containsName: DriverSummary[] = [];
+      const containsBody: DriverSummary[] = [];
+
+      drivers.forEach((driver) => {
+        const bn = driver.body_number.toLowerCase();
+        const fn = driver.full_name.toLowerCase();
+
+        if (bn === q) {
+          exactBody.push(driver);
+        } else if (bn.startsWith(q)) {
+          prefixBody.push(driver);
+        } else if (fn.startsWith(q)) {
+          prefixName.push(driver);
+        } else if (fn.includes(q)) {
+          containsName.push(driver);
+        } else if (bn.includes(q)) {
+          containsBody.push(driver);
+        }
+      });
+
+      return [
+        ...exactBody,
+        ...prefixBody,
+        ...prefixName,
+        ...containsName,
+        ...containsBody,
+      ].slice(0, 10);
+    },
+    [drivers]
+  );
+
+  /**
+   * Search drivers by body number prefix (for legacy backwards compatibility).
    */
   const searchByPrefix = useCallback(
     (prefix: string): DriverSummary[] => {
-      if (!prefix) return [];
-      const results: DriverSummary[] = [];
-      drivers.forEach((driver) => {
-        if (driver.body_number.startsWith(prefix)) {
-          results.push(driver);
-        }
-      });
-      return results.slice(0, 10); // Limit suggestions
+      return searchDrivers(prefix);
     },
-    [drivers]
+    [searchDrivers]
   );
 
   return {
@@ -123,6 +158,7 @@ export function useDriverCache() {
     error,
     lookupByBodyNumber,
     searchByPrefix,
+    searchDrivers,
     totalDrivers: drivers.size,
   };
 }

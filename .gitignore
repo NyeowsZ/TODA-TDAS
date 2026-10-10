@@ -3,6 +3,9 @@
 **/.pnp
 .pnp.*
 
+#
+/DONOTPUSH/
+
 # Testing
 /coverage
 

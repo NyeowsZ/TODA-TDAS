@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, useMemo } from "react";
 import { getDailyAuditData, getAuditAdjustments, submitAuditAdjustment } from "@/lib/actions/audit-actions";
 import { formatManilaTime, formatManilaDate } from "@/lib/utils/format-timezone";
 import { createClient } from "@/lib/supabase/client";
+import { CleanOutputTab } from "./clean-output-tab";
 import {
   Calendar,
   Search,
@@ -46,7 +47,7 @@ export function AuditDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "voided">("all");
   const [isPending, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<"ledger" | "adjustments">("ledger");
+  const [activeTab, setActiveTab] = useState<"ledger" | "clean" | "adjustments">("ledger");
 
   // Adjustment modal state
   const [selectedDispatch, setSelectedDispatch] = useState<DispatchLogWithDriver | null>(null);
@@ -327,7 +328,17 @@ export function AuditDashboard() {
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              Dispatch Ledger ({dispatches.length})
+              Control Sheet ({dispatches.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("clean")}
+              className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all ${
+                activeTab === "clean"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Clean Output & Reconciliation
             </button>
             <button
               onClick={() => setActiveTab("adjustments")}
@@ -481,6 +492,11 @@ export function AuditDashboard() {
               </table>
             </div>
           </div>
+        )}
+
+        {/* Tab Content: Clean Output */}
+        {activeTab === "clean" && (
+          <CleanOutputTab dispatches={dispatches} activeDate={selectedDate} />
         )}
 
         {/* Tab Content: Adjustments */}

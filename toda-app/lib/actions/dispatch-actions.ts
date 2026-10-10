@@ -160,3 +160,67 @@ export async function getRecentDispatches() {
   if (error) return [];
   return data || [];
 }
+
+/**
+ * Adjust trip count of a consecutive run in-place on the live control sheet.
+ */
+export async function updateRunTripCount(input: {
+  driver_id: string;
+  dispatch_ids: number[];
+  target_count: number;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  // Fetch current dispatches
+  const { data: dispatches } = await supabase
+    .from("dispatch_logs")
+    .select("id, launch_count, logged_at, is_voided")
+    .in("id", input.dispatch_ids)
+    .eq("controller_id", user.id)
+    .eq("is_voided", false);
+
+  if (!dispatches || dispatches.length === 0) {
+    return { success: false, error: "No active dispatches found to adjust" };
+  }
+
+  const currentTotal = dispatches.reduce((sum, d) => sum + d.launch_count, 0);
+  const diff = input.target_count - currentTotal;
+
+  if (diff === 0) return { success: true };
+
+  if (diff > 0) {
+    return logDispatch({
+      driver_id: input.driver_id,
+      launch_count: diff,
+    });
+  } else {
+    const latest = dispatches[0];
+    const newCount = latest.launch_count + diff;
+    if (newCount > 0) {
+      const { error } = await supabase
+        .from("dispatch_logs")
+        .update({ launch_count: newCount })
+        .eq("id", latest.id)
+        .eq("controller_id", user.id);
+
+      if (error) return { success: false, error: error.message };
+    } else {
+      await voidDispatch({
+        dispatch_id: latest.id,
+        void_reason: "Adjusted launch count from live control sheet",
+      });
+    }
+
+    revalidatePath("/controller");
+    revalidatePath("/official/audit");
+    revalidatePath("/official/analytics");
+    return { success: true };
+  }
+}

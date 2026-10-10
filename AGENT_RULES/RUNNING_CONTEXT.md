@@ -121,6 +121,14 @@
 - [x] Supabase security linter fix (`ALTER VIEW view_driver_active_summaries SET (security_invoker = true)`)
 - [x] Created `quick_fix.sql` for instant one-click execution in Supabase SQL Editor
 
+- [x] Implemented reference Dacotoda attendance system workflow (`DONOTPUSH/dacotoda-daily-attendance-to-masterlist` parity):
+  - [x] Omnibox search (`omnibox-search.tsx`) with `/` or `Ctrl+K` hotkey, live instant typeahead dropdown matching body number and driver name, and Enter-to-dispatch.
+  - [x] Physical clipboard parity with 90-line sheet pagination pill (`[ ← ] [ Sheet X: 1–90 ] [ → ]`) matching physical Philippine TODA tally sheets.
+  - [x] Live Stack Control Sheet (`live-stack-feed.tsx`) with grouped consecutive runs (`Line 1–2 (x2)`), interactive steppers (`-` / `+`), and in-line trip count editing.
+  - [x] Quick Driver Registration Modal (`quick-driver-modal.tsx`) with 1-click "Save & Dispatch" directly from search query.
+  - [x] Clean Output & Masterlist Reconciliation Tab (`clean-output-tab.tsx`) in Official Audit with click-to-reconcile checklist (localStorage persisted), CSV export, and print formatting.
+  - [x] Server action `updateRunTripCount` maintaining immutable ledger rules while allowing in-window quantity adjustments.
+
 ---
 
 ## 9. Decisions & Notes Log
@@ -137,6 +145,7 @@
 | 2026-10-10 | Verified full TypeScript compilation and production Next.js build (10/10 routes passing).            |
 | 2026-10-10 | Fixed controller submission error masking and added live Supabase Realtime sync to audit/analytics.  |
 | 2026-10-10 | Created `supabase/quick_fix.sql` resolving Security Definer View warning and RLS policy evaluation.  |
+| 2026-10-10 | Re-architected controller input flow to match `DONOTPUSH/dacotoda-daily-attendance-to-masterlist` (Omnibox hotkey, 90-line sheet pagination, consecutive run grouping, inline stepper editing, clean output reconciliation). |
 
 ---
 
