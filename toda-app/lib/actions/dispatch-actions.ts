@@ -62,8 +62,14 @@ export async function logDispatch(input: {
     .single();
 
   if (error) {
+    console.error("logDispatch database error:", error);
     return { success: false, error: error.message };
   }
+
+  // Purge server caches so official audit and controller terminal update immediately
+  revalidatePath("/controller");
+  revalidatePath("/official/audit");
+  revalidatePath("/official/analytics");
 
   return { success: true, data: data as unknown as Record<string, unknown> };
 }
@@ -104,6 +110,7 @@ export async function voidDispatch(input: {
     .eq("is_voided", false);
 
   if (error) {
+    console.error("voidDispatch database error:", error);
     if (error.message.includes("0 rows")) {
       return {
         success: false,
@@ -112,6 +119,11 @@ export async function voidDispatch(input: {
     }
     return { success: false, error: error.message };
   }
+
+  // Purge server caches
+  revalidatePath("/controller");
+  revalidatePath("/official/audit");
+  revalidatePath("/official/analytics");
 
   return { success: true };
 }

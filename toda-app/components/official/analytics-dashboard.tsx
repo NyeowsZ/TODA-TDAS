@@ -181,6 +181,22 @@ export function AnalyticsDashboard() {
 
   useEffect(() => {
     fetchAnalytics(timeRange);
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel("analytics-realtime-feed")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dispatch_logs" },
+        () => {
+          fetchAnalytics(timeRange);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [timeRange]);
 
   const maxHourlyCount = useMemo(() => {

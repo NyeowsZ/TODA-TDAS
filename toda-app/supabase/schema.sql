@@ -138,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_adjustments_date
 -- ----------------------------------------------------------------------------
 -- 9. LIGHTWEIGHT IN-MEMORY HYDRATION VIEW (INV-NET-02)
 -- ----------------------------------------------------------------------------
-DROP VIEW IF EXISTS public.view_driver_active_summaries;
+DROP VIEW IF EXISTS public.view_driver_active_summaries CASCADE;
 CREATE VIEW public.view_driver_active_summaries
 WITH (security_invoker = true) AS
 SELECT
@@ -152,15 +152,60 @@ JOIN public.driver_profile_versions v
     ON d.id = v.driver_id
     AND d.current_version = v.version;
 
+ALTER VIEW public.view_driver_active_summaries SET (security_invoker = true);
+
 -- ----------------------------------------------------------------------------
 -- 10. HELPER FUNCTIONS & AUTH TRIGGERS
 -- ----------------------------------------------------------------------------
 
--- Function: Resolve current user's role from public.user_profiles
+-- Function: Resolve current user's role with multi-tier fallback (user_profiles -> jwt metadata)
 CREATE OR REPLACE FUNCTION public.current_user_role()
-RETURNS app_role AS $$
-    SELECT role FROM public.user_profiles WHERE id = auth.uid() AND is_active = true;
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+RETURNS app_role
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+    r app_role;
+BEGIN
+    -- 1. Check user_profiles table
+    SELECT role INTO r 
+    FROM public.user_profiles 
+    WHERE id = auth.uid() AND is_active = true;
+    
+    IF r IS NOT NULL THEN
+        RETURN r;
+    END IF;
+
+    -- 2. Fallback to JWT user metadata or app metadata
+    BEGIN
+        r := COALESCE(
+            (auth.jwt()->'user_metadata'->>'role')::app_role,
+            (auth.jwt()->'app_metadata'->>'role')::app_role
+        );
+        IF r IS NOT NULL THEN
+            RETURN r;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        null;
+    END;
+
+    -- 3. Fallback directly to auth.users raw_user_meta_data
+    BEGIN
+        SELECT (raw_user_meta_data->>'role')::app_role INTO r
+        FROM auth.users
+        WHERE id = auth.uid();
+        IF r IS NOT NULL THEN
+            RETURN r;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        null;
+    END;
+
+    RETURN NULL;
+END;
+$$;
 
 -- Trigger: Automatically create public.user_profiles on auth.users creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -265,7 +310,14 @@ ON public.dispatch_logs FOR INSERT
 TO authenticated
 WITH CHECK (
     auth.uid() = controller_id
-    AND public.current_user_role() = 'controller'
+    AND (
+        public.current_user_role() = 'controller'
+        OR (auth.jwt()->'user_metadata'->>'role') = 'controller'
+        OR EXISTS (
+            SELECT 1 FROM public.user_profiles 
+            WHERE id = auth.uid() AND role = 'controller' AND is_active = true
+        )
+    )
 );
 
 DROP POLICY IF EXISTS "Staff can view dispatches" ON public.dispatch_logs;
@@ -273,8 +325,15 @@ CREATE POLICY "Staff can view dispatches"
 ON public.dispatch_logs FOR SELECT
 TO authenticated
 USING (
-    (public.current_user_role() = 'controller' AND auth.uid() = controller_id)
+    -- Controllers can see their own logged dispatches
+    auth.uid() = controller_id
+    -- Officials / Auditors / Secretary / Chairman can see all dispatches
     OR public.current_user_role() IN ('official', 'auditor', 'secretary', 'chairman')
+    OR (auth.jwt()->'user_metadata'->>'role') IN ('official', 'auditor', 'secretary', 'chairman')
+    OR EXISTS (
+        SELECT 1 FROM public.user_profiles 
+        WHERE id = auth.uid() AND role IN ('official', 'auditor', 'secretary', 'chairman') AND is_active = true
+    )
 );
 
 -- Controller 2-Minute Undo Window enforced at DB Engine (INV-LOG-01)
@@ -581,6 +640,19 @@ BEGIN
         is_active = EXCLUDED.is_active;
 
 END $$;
+
+-- D. SYNC ALL AUTH USERS INTO PUBLIC.USER_PROFILES
+INSERT INTO public.user_profiles (id, full_name, role, is_active)
+SELECT 
+    u.id,
+    COALESCE(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
+    COALESCE((u.raw_user_meta_data->>'role')::app_role, 'controller'),
+    true
+FROM auth.users u
+ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role,
+    is_active = EXCLUDED.is_active;
 
 -- ----------------------------------------------------------------------------
 -- 15. SEED DRIVERS & SCD-2 PROFILE VERSIONS

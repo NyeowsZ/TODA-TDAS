@@ -17,8 +17,12 @@ export type ActionResult = {
 export async function getDailyAuditData(dateStr?: string) {
   const supabase = await createClient();
 
-  // Default to today in Manila timezone
-  const targetDate = dateStr || new Date().toISOString().split("T")[0];
+  // Default to today in Manila timezone (en-CA formats as YYYY-MM-DD)
+  const targetDate =
+    dateStr ||
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(
+      new Date()
+    );
 
   // Calculate day boundaries in Manila timezone (UTC+8)
   const dayStart = `${targetDate}T00:00:00+08:00`;
@@ -42,7 +46,10 @@ export async function getDailyAuditData(dateStr?: string) {
     .lte("logged_at", dayEnd)
     .order("logged_at", { ascending: false });
 
-  if (error) return { dispatches: [], metrics: null };
+  if (error) {
+    console.error("getDailyAuditData database error:", error);
+    return { dispatches: [], metrics: null };
+  }
 
   const items = (dispatches || []) as unknown as DispatchLogWithDriver[];
   const activeDispatches = items.filter((d) => !d.is_voided);

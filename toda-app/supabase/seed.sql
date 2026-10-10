@@ -121,6 +121,22 @@ BEGIN
 
 END $$;
 
+-- Fix security linter: Ensure view uses invoker permissions
+ALTER VIEW IF EXISTS public.view_driver_active_summaries SET (security_invoker = true);
+
+-- SYNC: Ensure ALL auth users have active user_profiles matching their role
+INSERT INTO public.user_profiles (id, full_name, role, is_active)
+SELECT 
+    u.id,
+    COALESCE(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
+    COALESCE((u.raw_user_meta_data->>'role')::app_role, 'controller'),
+    true
+FROM auth.users u
+ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role,
+    is_active = EXCLUDED.is_active;
+
 -- 4. SAMPLE REGISTERED DRIVERS
 INSERT INTO public.drivers (id, body_number, current_version, status, created_by)
 VALUES

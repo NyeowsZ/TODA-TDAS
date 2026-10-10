@@ -47,16 +47,19 @@ export function ControllerTerminal() {
     ? searchByPrefix(bodyNumber.trim())
     : [];
 
-  // Load initial feed
+  // Load initial feed & subscribe to Realtime
   useEffect(() => {
+    const supabase = createClient();
+    let currentUserId: string | null = null;
+
     async function loadFeed() {
-      const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      currentUserId = user.id;
 
-      const { data } = await supabase
+      const { data, error: loadError } = await supabase
         .from("dispatch_logs")
         .select(
           `
@@ -73,6 +76,11 @@ export function ControllerTerminal() {
         .eq("controller_id", user.id)
         .order("logged_at", { ascending: false })
         .limit(50);
+
+      if (loadError) {
+        console.error("loadFeed error:", loadError);
+        return;
+      }
 
       if (data) {
         const items: FeedItem[] = data.map((d: Record<string, unknown>) => {
@@ -95,7 +103,27 @@ export function ControllerTerminal() {
         setFeed(items);
       }
     }
+
     loadFeed();
+
+    // Subscribe to realtime dispatch updates for this booth
+    const channel = supabase
+      .channel("controller-feed-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dispatch_logs" },
+        (payload) => {
+          const row = (payload.new || payload.old) as { controller_id?: string };
+          if (!row || !currentUserId || row.controller_id === currentUserId) {
+            loadFeed();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Auto-focus body number input
@@ -128,9 +156,10 @@ export function ControllerTerminal() {
     setDebounceActive(true);
     setError(null);
 
+    const tempId = Date.now();
     // Optimistic feed update
     const optimisticItem: FeedItem = {
-      id: Date.now(),
+      id: tempId,
       driver_id: matchedDriver.id,
       controller_id: "",
       launch_count: launchCount,
@@ -146,8 +175,6 @@ export function ControllerTerminal() {
     };
 
     setFeed((prev) => [optimisticItem, ...prev].slice(0, 50));
-    setSuccessFlash(true);
-    setTimeout(() => setSuccessFlash(false), 1000);
 
     try {
       const result = await logDispatch({
@@ -156,39 +183,55 @@ export function ControllerTerminal() {
       });
 
       if (!result.success) {
+        console.error("Dispatch failed:", result.error);
         setError(result.error || "Failed to log dispatch");
-        // Remove optimistic item
-        setFeed((prev) => prev.filter((item) => item.id !== optimisticItem.id));
-      } else if (result.data) {
-        // Replace optimistic item with real data
-        setFeed((prev) =>
-          prev.map((item) =>
-            item.id === optimisticItem.id
-              ? {
-                  ...item,
-                  ...(result.data as unknown as Partial<FeedItem>),
-                  _optimistic: false,
-                }
-              : item
-          )
-        );
+        // Remove optimistic item on failure
+        setFeed((prev) => prev.filter((item) => item.id !== tempId));
+      } else {
+        // True success! Flash green
+        setSuccessFlash(true);
+        setTimeout(() => setSuccessFlash(false), 1000);
+
+        if (result.data) {
+          // Replace optimistic item with real data
+          setFeed((prev) =>
+            prev.map((item) =>
+              item.id === tempId
+                ? {
+                    ...item,
+                    ...(result.data as unknown as Partial<FeedItem>),
+                    _optimistic: false,
+                  }
+                : item
+            )
+          );
+        }
+
+        // Reset inputs on success only
+        setBodyNumber("");
+        setLaunchCount(1);
+        setShowSanityConfirm(false);
+        setTimeout(() => bodyInputRef.current?.focus(), 50);
       }
-    } catch {
-      setError("Network error. Entry may not have been saved.");
+    } catch (err) {
+      console.error("Network or dispatch error:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Network error. Entry may not have been saved."
+      );
+      setFeed((prev) => prev.filter((item) => item.id !== tempId));
+    } finally {
+      setIsSubmitting(false);
+      // 1500ms debounce per INV-DISP-03
+      setTimeout(() => setDebounceActive(false), 1500);
     }
-
-    resetForm();
-    setIsSubmitting(false);
-
-    // 1500ms debounce per INV-DISP-03
-    setTimeout(() => setDebounceActive(false), 1500);
   }, [
     debounceActive,
     isSubmitting,
     matchedDriver,
     launchCount,
     showSanityConfirm,
-    resetForm,
   ]);
 
   const handleUndo = useCallback(

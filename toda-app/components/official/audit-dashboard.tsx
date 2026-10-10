@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition, useMemo } from "react";
 import { getDailyAuditData, getAuditAdjustments, submitAuditAdjustment } from "@/lib/actions/audit-actions";
 import { formatManilaTime, formatManilaDate } from "@/lib/utils/format-timezone";
+import { createClient } from "@/lib/supabase/client";
 import {
   Calendar,
   Search,
@@ -76,6 +77,29 @@ export function AuditDashboard() {
 
   useEffect(() => {
     loadData(selectedDate);
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel("audit-realtime-feed")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dispatch_logs" },
+        () => {
+          loadData(selectedDate);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "audit_adjustments" },
+        () => {
+          loadData(selectedDate);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [selectedDate]);
 
   // Filtered dispatches
