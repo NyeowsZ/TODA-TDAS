@@ -131,6 +131,7 @@ export interface Database {
           driver_id: string;
           controller_id: string;
           launch_count: number;
+          route?: string | null;
           logged_at: string;
           is_voided: boolean;
           voided_at: string | null;
@@ -142,6 +143,7 @@ export interface Database {
           driver_id: string;
           controller_id: string;
           launch_count: number;
+          route?: string | null;
           logged_at?: string;
           is_voided?: boolean;
           voided_at?: string | null;
@@ -153,6 +155,7 @@ export interface Database {
           driver_id?: string;
           controller_id?: string;
           launch_count?: number;
+          route?: string | null;
           logged_at?: string;
           is_voided?: boolean;
           voided_at?: string | null;

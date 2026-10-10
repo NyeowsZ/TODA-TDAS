@@ -8,6 +8,7 @@ export const dispatchSchema = z.object({
     .int("Launch count must be a whole number")
     .positive("Launch count must be greater than zero")
     .max(999, "Launch count cannot exceed 999"),
+  route: z.string().max(50, "Route name cannot exceed 50 characters").optional(),
 });
 
 export type DispatchInput = z.infer<typeof dispatchSchema>;

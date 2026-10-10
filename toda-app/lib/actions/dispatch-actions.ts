@@ -17,6 +17,7 @@ export type ActionResult = {
 export async function logDispatch(input: {
   driver_id: string;
   launch_count: number;
+  route?: string;
 }): Promise<ActionResult> {
   const parsed = dispatchSchema.safeParse(input);
   if (!parsed.success) {
@@ -51,15 +52,41 @@ export async function logDispatch(input: {
   }
 
   // Insert dispatch log (timestamp is server-authoritative via DEFAULT NOW())
-  const { data, error } = await supabase
+  const insertPayload: {
+    driver_id: string;
+    controller_id: string;
+    launch_count: number;
+    route?: string;
+  } = {
+    driver_id: parsed.data.driver_id,
+    controller_id: user.id,
+    launch_count: parsed.data.launch_count,
+  };
+  if (parsed.data.route) {
+    insertPayload.route = parsed.data.route;
+  }
+
+  let { data, error } = await supabase
     .from("dispatch_logs")
-    .insert({
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  // Resilient fallback if Supabase DB does not have the 'route' column yet
+  if (error && error.message?.includes("route") && parsed.data.route) {
+    const retryPayload = {
       driver_id: parsed.data.driver_id,
       controller_id: user.id,
       launch_count: parsed.data.launch_count,
-    })
-    .select()
-    .single();
+    };
+    const retry = await supabase
+      .from("dispatch_logs")
+      .insert(retryPayload)
+      .select()
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     console.error("logDispatch database error:", error);

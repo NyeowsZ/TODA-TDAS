@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS public.dispatch_logs (
     driver_id UUID NOT NULL REFERENCES public.drivers(id) ON DELETE RESTRICT,
     controller_id UUID NOT NULL REFERENCES auth.users(id),
     launch_count SMALLINT NOT NULL CHECK (launch_count > 0),
+    route VARCHAR(50) DEFAULT 'Guinsay',
     logged_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     is_voided BOOLEAN DEFAULT FALSE NOT NULL,
     voided_at TIMESTAMPTZ,
