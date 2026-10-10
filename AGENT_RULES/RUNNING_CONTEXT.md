@@ -8,28 +8,28 @@
 
 ## 1. Project Identity
 
-| Field              | Value                                                                 |
-| ------------------ | --------------------------------------------------------------------- |
-| **Project Name**   | Dacotoda Management & Information System                              |
-| **Workspace**      | `c:\Users\JV\Desktop\DacotodaManagementSystem`                        |
-| **Domain**         | TODA (Tricycle Operators and Drivers Association) dispatch operations  |
-| **Region/Locale**  | Philippines — timezone `Asia/Manila` (UTC+8 / GMT+8)                  |
-| **Target Users**   | Controllers (dispatch booth), Officials/Auditors, Executive Board     |
+| Field             | Value                                                                 |
+| ----------------- | --------------------------------------------------------------------- |
+| **Project Name**  | Dacotoda Management & Information System                              |
+| **Workspace**     | `c:\Users\JV\Desktop\DacotodaManagementSystem`                        |
+| **Domain**        | TODA (Tricycle Operators and Drivers Association) dispatch operations |
+| **Region/Locale** | Philippines — timezone `Asia/Manila` (UTC+8 / GMT+8)                  |
+| **Target Users**  | Controllers (dispatch booth), Officials/Auditors, Executive Board     |
 
 ---
 
 ## 2. Architecture Snapshot
 
-| Layer          | Technology                        | Notes                                                      |
-| -------------- | --------------------------------- | ---------------------------------------------------------- |
-| Framework      | Next.js (App Router)              | Server Components for analytics, Client for terminal I/O   |
-| Hosting        | Vercel                            | Serverless, edge-deployed                                  |
-| Database       | PostgreSQL via Supabase (Pro)     | RLS-enforced, append-only ledger, SCD-2 versioning         |
-| Auth           | Supabase Auth (`@supabase/ssr`)   | httpOnly cookie sessions, role-based (RBAC/ABAC)           |
-| State/Cache    | TanStack React Query              | In-memory driver roster cache, optimistic dispatch feed    |
-| UI/Styling     | Tailwind CSS + shadcn/ui          | Modern rounded minimalist design system (see SYSTEM_UIUX)  |
-| Storage        | Supabase Storage                  | WebP-compressed driver/unit photos (<=100KB)               |
-| Type Safety    | Supabase CLI auto-gen types       | `types/supabase.ts`                                        |
+| Layer       | Technology                      | Notes                                                     |
+| ----------- | ------------------------------- | --------------------------------------------------------- |
+| Framework   | Next.js (App Router)            | Server Components for analytics, Client for terminal I/O  |
+| Hosting     | Vercel                          | Serverless, edge-deployed                                 |
+| Database    | PostgreSQL via Supabase (Pro)   | RLS-enforced, append-only ledger, SCD-2 versioning        |
+| Auth        | Supabase Auth (`@supabase/ssr`) | httpOnly cookie sessions, role-based (RBAC/ABAC)          |
+| State/Cache | TanStack React Query            | In-memory driver roster cache, optimistic dispatch feed   |
+| UI/Styling  | Tailwind CSS + shadcn/ui        | Modern rounded minimalist design system (see SYSTEM_UIUX) |
+| Storage     | Supabase Storage                | WebP-compressed driver/unit photos (<=100KB)              |
+| Type Safety | Supabase CLI auto-gen types     | `types/supabase.ts`                                       |
 
 ---
 
@@ -46,12 +46,12 @@
 
 ## 4. Key Roles & Permissions Summary
 
-| Role                   | Can Dispatch | Can Undo (2m) | Can View Audit | Can Adjust (36h) | Can Manage Drivers | Can Change Settings |
-| ---------------------- | ------------ | ------------- | -------------- | ---------------- | ------------------ | ------------------- |
-| Controller             | Yes          | Yes           | No             | No               | No                 | No                  |
-| Official / Auditor     | No           | No            | Yes            | Yes              | No                 | No                  |
-| Secretary              | No           | No            | Yes            | Yes              | Yes                | No                  |
-| Chairman               | No           | No            | Yes            | Yes              | Yes                | Yes                 |
+| Role               | Can Dispatch | Can Undo (2m) | Can View Audit | Can Adjust (36h) | Can Manage Drivers | Can Change Settings |
+| ------------------ | ------------ | ------------- | -------------- | ---------------- | ------------------ | ------------------- |
+| Controller         | Yes          | Yes           | No             | No               | No                 | No                  |
+| Official / Auditor | No           | No            | Yes            | Yes              | No                 | No                  |
+| Secretary          | No           | No            | Yes            | Yes              | Yes                | No                  |
+| Chairman           | No           | No            | Yes            | Yes              | Yes                | Yes                 |
 
 ---
 
@@ -81,14 +81,14 @@
 
 ## 7. Database Tables (Quick Reference)
 
-| Table                       | Purpose                                              |
-| --------------------------- | ---------------------------------------------------- |
-| `system_settings`           | Dynamic config (thresholds, grace windows)            |
-| `user_profiles`             | Maps `auth.users` to app role + active status        |
-| `drivers`                   | Identity anchor (body_number, current_version, status)|
-| `driver_profile_versions`   | Immutable SCD-2 history of driver details             |
-| `dispatch_logs`             | Append-only dispatch ledger                           |
-| `audit_adjustments`         | 36-hour correction records by officials               |
+| Table                     | Purpose                                                |
+| ------------------------- | ------------------------------------------------------ |
+| `system_settings`         | Dynamic config (thresholds, grace windows)             |
+| `user_profiles`           | Maps `auth.users` to app role + active status          |
+| `drivers`                 | Identity anchor (body_number, current_version, status) |
+| `driver_profile_versions` | Immutable SCD-2 history of driver details              |
+| `dispatch_logs`           | Append-only dispatch ledger                            |
+| `audit_adjustments`       | 36-hour correction records by officials                |
 
 ---
 
@@ -123,14 +123,14 @@
 
 | Date       | Decision / Note                                                                                      |
 | ---------- | ---------------------------------------------------------------------------------------------------- |
-| 2026-10-10 | Read all 4 AGENT_RULES files. Created RUNNING_CONTEXT.md.                                             |
+| 2026-10-10 | Read all 4 AGENT_RULES files. Created RUNNING_CONTEXT.md.                                            |
 | 2026-10-10 | Initialized Next.js App Router app (`toda-app`) on branch `dev`.                                     |
 | 2026-10-10 | Implemented strict 60-30-10 color tokens & hyper-rounded typography in `globals.css`.                |
 | 2026-10-10 | Built sub-2s dispatch loop terminal with local memory Map lookup, 1500ms debounce, >10 sanity check. |
-| 2026-10-10 | Implemented SCD-2 driver versioning with append-only immutable history and WebP image compression.    |
+| 2026-10-10 | Implemented SCD-2 driver versioning with append-only immutable history and WebP image compression.   |
 | 2026-10-10 | Built Official Audit dashboard with 36-hour adjustment workflow and rush hour hourly chart.          |
 | 2026-10-10 | Created complete SQL schema (`supabase/schema.sql`) with RLS enforcement at DB engine.               |
-| 2026-10-10 | Verified full TypeScript compilation and production Next.js build (10/10 routes passing).           |
+| 2026-10-10 | Verified full TypeScript compilation and production Next.js build (10/10 routes passing).            |
 
 ---
 
@@ -142,4 +142,4 @@
 
 ---
 
-*This file is maintained by the AI agent. It will be updated as the project progresses.*
+_This file is maintained by the AI agent. It will be updated as the project progresses._
