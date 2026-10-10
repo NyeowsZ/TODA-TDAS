@@ -14,11 +14,16 @@ DECLARE
 
     enc_pw TEXT := crypt('Password123!', gen_salt('bf'));
     has_provider_id BOOLEAN;
+    id_data_type TEXT;
 BEGIN
     SELECT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'auth' AND table_name = 'identities' AND column_name = 'provider_id'
     ) INTO has_provider_id;
+
+    SELECT data_type INTO id_data_type
+    FROM information_schema.columns 
+    WHERE table_schema = 'auth' AND table_name = 'identities' AND column_name = 'id';
 
     -- 1. AUTH USERS
     INSERT INTO auth.users (
@@ -34,24 +39,54 @@ BEGIN
     ON CONFLICT (id) DO UPDATE SET encrypted_password = enc_pw, email_confirmed_at = NOW();
 
     -- 2. AUTH IDENTITIES
-    IF has_provider_id THEN
-        INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
-        VALUES
-            (uid_chairman::text, uid_chairman, jsonb_build_object('sub', uid_chairman::text, 'email', 'chairman@toda.local'), 'email', uid_chairman::text, NOW(), NOW(), NOW()),
-            (uid_secretary::text, uid_secretary, jsonb_build_object('sub', uid_secretary::text, 'email', 'secretary@toda.local'), 'email', uid_secretary::text, NOW(), NOW(), NOW()),
-            (uid_auditor::text, uid_auditor, jsonb_build_object('sub', uid_auditor::text, 'email', 'auditor@toda.local'), 'email', uid_auditor::text, NOW(), NOW(), NOW()),
-            (uid_controller1::text, uid_controller1, jsonb_build_object('sub', uid_controller1::text, 'email', 'controller1@toda.local'), 'email', uid_controller1::text, NOW(), NOW(), NOW()),
-            (uid_controller2::text, uid_controller2, jsonb_build_object('sub', uid_controller2::text, 'email', 'controller2@toda.local'), 'email', uid_controller2::text, NOW(), NOW(), NOW())
-        ON CONFLICT (provider, provider_id) DO NOTHING;
+    IF id_data_type = 'uuid' THEN
+        IF has_provider_id THEN
+            EXECUTE $q$
+                INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+                VALUES
+                    (gen_random_uuid(), $1, jsonb_build_object('sub', $1::text, 'email', 'chairman@toda.local'), 'email', $1::text, NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $2, jsonb_build_object('sub', $2::text, 'email', 'secretary@toda.local'), 'email', $2::text, NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $3, jsonb_build_object('sub', $3::text, 'email', 'auditor@toda.local'), 'email', $3::text, NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $4, jsonb_build_object('sub', $4::text, 'email', 'controller1@toda.local'), 'email', $4::text, NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $5, jsonb_build_object('sub', $5::text, 'email', 'controller2@toda.local'), 'email', $5::text, NOW(), NOW(), NOW())
+                ON CONFLICT DO NOTHING
+            $q$ USING uid_chairman, uid_secretary, uid_auditor, uid_controller1, uid_controller2;
+        ELSE
+            EXECUTE $q$
+                INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+                VALUES
+                    (gen_random_uuid(), $1, jsonb_build_object('sub', $1::text, 'email', 'chairman@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $2, jsonb_build_object('sub', $2::text, 'email', 'secretary@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $3, jsonb_build_object('sub', $3::text, 'email', 'auditor@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $4, jsonb_build_object('sub', $4::text, 'email', 'controller1@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    (gen_random_uuid(), $5, jsonb_build_object('sub', $5::text, 'email', 'controller2@toda.local'), 'email', NOW(), NOW(), NOW())
+                ON CONFLICT DO NOTHING
+            $q$ USING uid_chairman, uid_secretary, uid_auditor, uid_controller1, uid_controller2;
+        END IF;
     ELSE
-        INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-        VALUES
-            (uid_chairman::text, uid_chairman, jsonb_build_object('sub', uid_chairman::text, 'email', 'chairman@toda.local'), 'email', NOW(), NOW(), NOW()),
-            (uid_secretary::text, uid_secretary, jsonb_build_object('sub', uid_secretary::text, 'email', 'secretary@toda.local'), 'email', NOW(), NOW(), NOW()),
-            (uid_auditor::text, uid_auditor, jsonb_build_object('sub', uid_auditor::text, 'email', 'auditor@toda.local'), 'email', NOW(), NOW(), NOW()),
-            (uid_controller1::text, uid_controller1, jsonb_build_object('sub', uid_controller1::text, 'email', 'controller1@toda.local'), 'email', NOW(), NOW(), NOW()),
-            (uid_controller2::text, uid_controller2, jsonb_build_object('sub', uid_controller2::text, 'email', 'controller2@toda.local'), 'email', NOW(), NOW(), NOW())
-        ON CONFLICT DO NOTHING;
+        IF has_provider_id THEN
+            EXECUTE $q$
+                INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+                VALUES
+                    ($1::text, $1, jsonb_build_object('sub', $1::text, 'email', 'chairman@toda.local'), 'email', $1::text, NOW(), NOW(), NOW()),
+                    ($2::text, $2, jsonb_build_object('sub', $2::text, 'email', 'secretary@toda.local'), 'email', $2::text, NOW(), NOW(), NOW()),
+                    ($3::text, $3, jsonb_build_object('sub', $3::text, 'email', 'auditor@toda.local'), 'email', $3::text, NOW(), NOW(), NOW()),
+                    ($4::text, $4, jsonb_build_object('sub', $4::text, 'email', 'controller1@toda.local'), 'email', $4::text, NOW(), NOW(), NOW()),
+                    ($5::text, $5, jsonb_build_object('sub', $5::text, 'email', 'controller2@toda.local'), 'email', $5::text, NOW(), NOW(), NOW())
+                ON CONFLICT DO NOTHING
+            $q$ USING uid_chairman, uid_secretary, uid_auditor, uid_controller1, uid_controller2;
+        ELSE
+            EXECUTE $q$
+                INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+                VALUES
+                    ($1::text, $1, jsonb_build_object('sub', $1::text, 'email', 'chairman@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    ($2::text, $2, jsonb_build_object('sub', $2::text, 'email', 'secretary@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    ($3::text, $3, jsonb_build_object('sub', $3::text, 'email', 'auditor@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    ($4::text, $4, jsonb_build_object('sub', $4::text, 'email', 'controller1@toda.local'), 'email', NOW(), NOW(), NOW()),
+                    ($5::text, $5, jsonb_build_object('sub', $5::text, 'email', 'controller2@toda.local'), 'email', NOW(), NOW(), NOW())
+                ON CONFLICT DO NOTHING
+            $q$ USING uid_chairman, uid_secretary, uid_auditor, uid_controller1, uid_controller2;
+        END IF;
     END IF;
 
     -- 3. USER PROFILES
