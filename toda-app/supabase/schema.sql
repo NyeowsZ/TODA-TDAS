@@ -49,6 +49,23 @@ ON CONFLICT (key) DO UPDATE SET
     updated_at = NOW();
 
 -- ----------------------------------------------------------------------------
+-- 3.1. DISPATCH ROUTES (Configurable & Admin-Managed)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.routes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(50) UNIQUE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    sort_order INT DEFAULT 0 NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+INSERT INTO public.routes (name, is_active, sort_order) VALUES
+    ('Guinsay', true, 1),
+    ('Taytay', true, 2),
+    ('Sabang', true, 3)
+ON CONFLICT (name) DO NOTHING;
+
+-- ----------------------------------------------------------------------------
 -- 4. USER PROFILES TABLE (Maps 1:1 with auth.users)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.user_profiles (
@@ -81,7 +98,11 @@ CREATE TABLE IF NOT EXISTS public.driver_profile_versions (
     id BIGSERIAL PRIMARY KEY,
     driver_id UUID NOT NULL REFERENCES public.drivers(id) ON DELETE RESTRICT,
     version INT NOT NULL,
-    full_name VARCHAR(150) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    middle_initial VARCHAR(10) DEFAULT '—',
+    nickname VARCHAR(50),
+    full_name VARCHAR(250) NOT NULL,
     contact_number VARCHAR(30),
     driver_photo_url TEXT,
     unit_photo_url TEXT,
@@ -145,6 +166,10 @@ WITH (security_invoker = true) AS
 SELECT
     d.id,
     d.body_number,
+    COALESCE(v.first_name, '') AS first_name,
+    COALESCE(v.last_name, '') AS last_name,
+    COALESCE(v.middle_initial, '—') AS middle_initial,
+    COALESCE(v.nickname, '') AS nickname,
     v.full_name,
     v.driver_photo_url,
     d.status
@@ -383,6 +408,22 @@ ON public.audit_adjustments FOR SELECT
 TO authenticated
 USING (public.current_user_role() IN ('official', 'auditor', 'secretary', 'chairman'));
 
+-- ROUTES POLICIES
+ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated users can view routes" ON public.routes;
+CREATE POLICY "Authenticated users can view routes"
+ON public.routes FOR SELECT
+TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Officials can manage routes" ON public.routes;
+CREATE POLICY "Officials can manage routes"
+ON public.routes FOR ALL
+TO authenticated
+USING (public.current_user_role() IN ('official', 'secretary', 'chairman'))
+WITH CHECK (public.current_user_role() IN ('official', 'secretary', 'chairman'));
+
 -- ----------------------------------------------------------------------------
 -- 12. SUPABASE REALTIME CONFIGURATION
 -- ----------------------------------------------------------------------------
@@ -393,6 +434,11 @@ END $$;
 
 DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.dispatch_logs;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.routes;
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 

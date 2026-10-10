@@ -137,38 +137,54 @@ ON CONFLICT (id) DO UPDATE SET
     role = EXCLUDED.role,
     is_active = EXCLUDED.is_active;
 
+-- 3.5. SAMPLE ROUTES
+INSERT INTO public.routes (name, is_active, sort_order)
+VALUES
+    ('Guinsay', true, 1),
+    ('Taytay', true, 2),
+    ('Sabang', true, 3)
+ON CONFLICT (name) DO NOTHING;
+
 -- 4. SAMPLE REGISTERED DRIVERS
 INSERT INTO public.drivers (id, body_number, current_version, status, created_by)
 VALUES
     ('d0000000-0000-0000-0000-000000000042', '042', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000055', '055', 1, 'inactive', 'a0000000-0000-0000-0000-000000000002'),
     ('d0000000-0000-0000-0000-000000000088', '088', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
     ('d0000000-0000-0000-0000-000000000118', '118', 1, 'suspended', 'a0000000-0000-0000-0000-000000000002'),
     ('d0000000-0000-0000-0000-000000000155', '155', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
     ('d0000000-0000-0000-0000-000000000204', '204', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
-    ('d0000000-0000-0000-0000-000000000301', '301', 2, 'active', 'a0000000-0000-0000-0000-000000000002')
+    ('d0000000-0000-0000-0000-000000000301', '301', 2, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000550', '550', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000000560', '560', 1, 'active', 'a0000000-0000-0000-0000-000000000002'),
+    ('d0000000-0000-0000-0000-000000001001', '1001', 1, 'suspended', 'a0000000-0000-0000-0000-000000000002')
 ON CONFLICT (body_number) DO UPDATE SET
     status = EXCLUDED.status,
     current_version = EXCLUDED.current_version;
 
 -- 5. DRIVER PROFILE VERSIONS (SCD-2)
-INSERT INTO public.driver_profile_versions (driver_id, version, full_name, contact_number, changed_by, change_reason)
+INSERT INTO public.driver_profile_versions (driver_id, version, first_name, last_name, middle_initial, nickname, full_name, contact_number, changed_by, change_reason)
 VALUES
-    ('d0000000-0000-0000-0000-000000000042', 1, 'Rodrigo Mendoza', '09171234567', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
-    ('d0000000-0000-0000-0000-000000000088', 1, 'Carlos Santos', '09182345678', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
-    ('d0000000-0000-0000-0000-000000000118', 1, 'Danilo Ramos', '09193456789', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration (Suspended: Route violation)'),
-    ('d0000000-0000-0000-0000-000000000155', 1, 'Eduardo Reyes', '09204567890', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
-    ('d0000000-0000-0000-0000-000000000204', 1, 'Fernando Dizon', '09215678901', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
-    ('d0000000-0000-0000-0000-000000000301', 1, 'Gabriel Garcia Sr.', '09226789012', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
-    ('d0000000-0000-0000-0000-000000000301', 2, 'Gabriel Garcia Jr.', '09226789012', 'a0000000-0000-0000-0000-000000000002', 'Franchise Transfer: Successor driver registered')
+    ('d0000000-0000-0000-0000-000000000042', 1, 'Rodrigo', 'Mendoza', 'A.', 'Rody', 'Mendoza, Rodrigo A.', '09171234567', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000055', 1, 'Pepe', 'Santos', 'C.', 'Pepito', 'Santos, Pepe C.', '09175550055', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration (Inactive)'),
+    ('d0000000-0000-0000-0000-000000000088', 1, 'Carlos', 'Santos', 'B.', 'Caloy', 'Santos, Carlos B.', '09182345678', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000118', 1, 'Danilo', 'Ramos', 'E.', 'Danny', 'Ramos, Danilo E.', '09193456789', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration (Suspended: Route violation)'),
+    ('d0000000-0000-0000-0000-000000000155', 1, 'Eduardo', 'Reyes', 'M.', 'Eddie', 'Reyes, Eduardo M.', '09204567890', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000204', 1, 'Fernando', 'Dizon', 'P.', 'Nando', 'Dizon, Fernando P.', '09215678901', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000301', 1, 'Gabriel', 'Garcia', 'S.', 'Gabby', 'Garcia, Gabriel S. Sr.', '09226789012', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000301', 2, 'Gabriel', 'Garcia', 'J.', 'Jun', 'Garcia, Gabriel J. Jr.', '09226789012', 'a0000000-0000-0000-0000-000000000002', 'Franchise Transfer: Successor driver registered'),
+    ('d0000000-0000-0000-0000-000000000550', 1, 'Juan', 'Dela Cruz', 'P.', 'Johnny', 'Dela Cruz, Juan P.', '09175505500', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000000560', 1, 'Eduardo', 'Bautista', 'S.', 'Dodo', 'Bautista, Eduardo S.', '09175605600', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration'),
+    ('d0000000-0000-0000-0000-000000001001', 1, 'Noah', 'Alvarez', 'Z.', 'Nyeows', 'Alvarez, Noah Z.', '09179991001', 'a0000000-0000-0000-0000-000000000002', 'Initial Registration (Suspended: License revoked)')
 ON CONFLICT (driver_id, version) DO NOTHING;
 
 -- 6. SAMPLE DISPATCH LOGS
-INSERT INTO public.dispatch_logs (driver_id, controller_id, launch_count, logged_at, is_voided, void_reason)
+INSERT INTO public.dispatch_logs (driver_id, controller_id, launch_count, route, logged_at, is_voided, void_reason)
 VALUES
-    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '120 minutes', false, null),
-    ('d0000000-0000-0000-0000-000000000088', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '95 minutes', false, null),
-    ('d0000000-0000-0000-0000-000000000155', 'a0000000-0000-0000-0000-000000000004', 2, NOW() - INTERVAL '70 minutes', false, null),
-    ('d0000000-0000-0000-0000-000000000204', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '40 minutes', false, null),
-    ('d0000000-0000-0000-0000-000000000301', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '20 minutes', false, null),
-    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '15 minutes', true, 'Entered wrong launch multiplier (voided within 2m window)'),
-    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, NOW() - INTERVAL '14 minutes', false, null);
+    ('d0000000-0000-0000-0000-000000000550', 'a0000000-0000-0000-0000-000000000004', 10, 'Guinsay', NOW() - INTERVAL '120 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000560', 'a0000000-0000-0000-0000-000000000004', 2, 'Taytay', NOW() - INTERVAL '95 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000042', 'a0000000-0000-0000-0000-000000000004', 1, 'Sabang', NOW() - INTERVAL '70 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000088', 'a0000000-0000-0000-0000-000000000004', 1, 'Guinsay', NOW() - INTERVAL '40 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000155', 'a0000000-0000-0000-0000-000000000004', 2, 'Taytay', NOW() - INTERVAL '20 minutes', false, null),
+    ('d0000000-0000-0000-0000-000000000204', 'a0000000-0000-0000-0000-000000000004', 1, 'Guinsay', NOW() - INTERVAL '15 minutes', true, 'Entered wrong launch multiplier (voided within 2m window)'),
+    ('d0000000-0000-0000-0000-000000000204', 'a0000000-0000-0000-0000-000000000004', 1, 'Guinsay', NOW() - INTERVAL '14 minutes', false, null);
