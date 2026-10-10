@@ -1,0 +1,17 @@
+{
+  "name": "Dacotoda Management & Information System",
+  "short_name": "TODA System",
+  "description": "High-throughput dispatch terminal and operational audit ledger for TODA",
+  "start_url": "/controller",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
